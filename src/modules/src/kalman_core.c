@@ -63,7 +63,7 @@
 
 #include "log.h"
 #include "param.h"
-#include "math3d.h"
+#include "debug.h"
 
 // #define DEBUG_STATE_CHECK
 
@@ -156,22 +156,13 @@ static float initialX = 0.0;
 static float initialY = 0.0;
 static float initialZ = 0.0;
 
-// Initial yaw of the Crazyflie in radians.
-// 0 --- facing positive X
-// PI / 2 --- facing positive Y
-// PI --- facing negative X
-// 3 * PI / 2 --- facing negative Y
-static float initialYaw = 0.0;
-
-// Quaternion used for initial yaw
-static float initialQuaternion[4] = {0.0, 0.0, 0.0, 0.0};
-
 static uint32_t tdoaCount;
 
+static bool heading_updated;
 
 void kalmanCoreInit(kalmanCoreData_t* this) {
   tdoaCount = 0;
-
+  heading_updated = false;
   // Reset all data to 0 (like upon system reset)
   memset(this, 0, sizeof(kalmanCoreData_t));
 
@@ -186,11 +177,7 @@ void kalmanCoreInit(kalmanCoreData_t* this) {
 //  this->S[KC_STATE_D2] = 0;
 
   // reset the attitude quaternion
-  initialQuaternion[0] = arm_cos_f32(initialYaw / 2);
-  initialQuaternion[1] = 0.0;
-  initialQuaternion[2] = 0.0;
-  initialQuaternion[3] = arm_sin_f32(initialYaw / 2);
-  for (int i = 0; i < 4; i++) { this->q[i] = initialQuaternion[i]; }
+  this->q[0] = 1; // this->q[1] = 0; this->q[2] = 0; this->q[3] = 0;
 
   // then set the initial rotation matrix to the identity. This only affects
   // the first prediction step, since in the finalization, after shifting
@@ -248,6 +235,7 @@ static void scalarUpdate(kalmanCoreData_t* this, arm_matrix_instance_f32 *Hm, fl
   ASSERT(Hm->numRows == 1);
   ASSERT(Hm->numCols == KC_STATE_DIM);
 
+
   // ====== INNOVATION COVARIANCE ======
 
   mat_trans(Hm, &HTm);
@@ -259,6 +247,7 @@ static void scalarUpdate(kalmanCoreData_t* this, arm_matrix_instance_f32 *Hm, fl
   }
   ASSERT(!isnan(HPHR));
 
+
   // ====== MEASUREMENT UPDATE ======
   // Calculate the Kalman gain and perform the state update
   for (int i=0; i<KC_STATE_DIM; i++) {
@@ -267,6 +256,9 @@ static void scalarUpdate(kalmanCoreData_t* this, arm_matrix_instance_f32 *Hm, fl
   }
   assertStateNotNaN(this);
 
+  //DEBUG_PRINT("K: %f, %f, %f, %f, %f, %f, %f, %f, %f\n",K[0], K[1], K[2], K[3], K[4], K[5], K[6], K[7], K[8]);
+  //DEBUG_PRINT("Error: %f\n",error);
+
   // ====== COVARIANCE UPDATE ======
   mat_mult(&Km, Hm, &tmpNN1m); // KH
   for (int i=0; i<KC_STATE_DIM; i++) { tmpNN1d[KC_STATE_DIM*i+i] -= 1; } // KH - I
@@ -274,6 +266,7 @@ static void scalarUpdate(kalmanCoreData_t* this, arm_matrix_instance_f32 *Hm, fl
   mat_mult(&tmpNN1m, &this->Pm, &tmpNN3m); // (KH - I)*P
   mat_mult(&tmpNN3m, &tmpNN2m, &this->Pm); // (KH - I)*P*(KH - I)'
   assertStateNotNaN(this);
+
   // add the measurement variance and ensure boundedness and symmetry
   // TODO: Why would it hit these bounds? Needs to be investigated.
   for (int i=0; i<KC_STATE_DIM; i++) {
@@ -291,9 +284,348 @@ static void scalarUpdate(kalmanCoreData_t* this, arm_matrix_instance_f32 *Hm, fl
   }
 
   assertStateNotNaN(this);
+
 }
 
+void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
+	  // a direct measurement of states x, y, and z
+	  // do a scalar update for each state, since this should be faster than updating all together
+	//DEBUG_PRINT("in mlh update\n");
+	/*
+	  for (int i=0; i<1; i++) {
+	    float h[KC_STATE_DIM] = {0};
+	    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+	    h[KC_STATE_X+i] = 1;
+	    float meas = 2.0f;
+	    DEBUG_PRINT("meas: %f, state: %f \n",meas, this->S[KC_STATE_X +i]);
+	    scalarUpdate(this, &H, meas- this->S[KC_STATE_X+i], 0.01f);
 
+
+	   // DEBUG_PRINT("after scalar update %f \n");
+	  }*/
+	//angle of measurement
+	float angle = mlh->heading;
+	//distance between robot and anchor/lighhtouse
+	float r = sqrtf(powf(mlh->x - this->S[KC_STATE_X],2) + powf(mlh->y - this->S[KC_STATE_Y],2));
+
+	//avoid divide by zero
+	if(r == 0.0){
+		return;
+	}
+
+    float h[KC_STATE_DIM] = {0};
+    //h[KC_STATE_X] = -sin(angle)/r; //dh/dx
+   // h[KC_STATE_Y] = cos(angle)/r; //dh/dy
+    h[KC_STATE_X] = sin(angle)/r; //dh/dx
+    h[KC_STATE_Y] = -cos(angle)/r; //dh/dy
+    float phi_p = atan2f(mlh->y - this->S[KC_STATE_Y],mlh->x - this->S[KC_STATE_X]);
+    /*
+    DEBUG_PRINT("z: %f, zp: %f, r: %f, Hx: %f, Hy: %f\n",angle,phi_p, r, h[KC_STATE_X], h[KC_STATE_Y]);
+    DEBUG_PRINT("xp: %f, yp: %f\n",this->S[KC_STATE_X], this->S[KC_STATE_Y]);
+    DEBUG_PRINT("error\n", angle - phi_p);
+    */
+    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+
+
+    float tan_top = sinf(angle)*cosf(phi_p) - cosf(angle)*sinf(phi_p);
+    float tan_bot = cosf(angle)*cosf(phi_p) + sinf(angle)*sinf(phi_p);
+    float wrap_error = atan2f(tan_top,tan_bot);
+    DEBUG_PRINT("Raw Diff: %f, Wrapped Diff: %f \n",angle - phi_p, wrap_error);
+    scalarUpdate(this, &H,wrap_error, 0.05f);
+    //if(angle - phi_p < 3.14159f){
+    //	scalarUpdate(this, &H,angle - phi_p, 0.05f);
+    //}
+   // DEBUG_PRINT("xm: %f, ym: %f\n",this->S[KC_STATE_X], this->S[KC_STATE_Y]);
+}
+
+//this function rotates a vector
+void rotateVector(vector_t * vec, float R[3][3],vector_t * dstVec){
+  //rotate mag vector by roll and pitch to compensate for tilt
+  dstVec -> x = R[0][0] * vec -> x + R[0][1] * vec -> y+ R[0][2]  * vec -> z;
+  dstVec -> y = R[1][0] * vec -> x + R[1][1] * vec -> y + R[1][2] * vec -> z;
+  dstVec -> z = R[2][0] * vec -> x + R[2][1] * vec -> y + R[2][2] * vec -> z;
+}
+
+float quatRotate(float * q1, float * q2, float * dstq,bool normalize){
+	// rotate the quad's attitude by the delta quaternion vector computed above
+	dstq[0] = q1[0] * q2[0] - q2[1] * q1[1] - q2[2] * q1[2] - q2[3] * q1[3];
+	dstq[1]  = q1[0] * q2[1] + q2[0] * q1[1] + q2[3] * q1[2] - q2[2] * q1[3];
+	dstq[2] = q1[0] * q2[2]- q2[3] * q1[1] + q2[0] * q1[2] + q2[1] * q1[3];
+	dstq[3] = q1[0] * q2[3] + q2[2] * q1[1] - q2[1] * q1[2] + q2[0] * q1[3];
+
+	float norm = arm_sqrt(dstq[0] * dstq[0] + dstq[1] * dstq[1] + dstq[2] * dstq[2] + dstq[3] * dstq[3]);
+	if (norm != 0){
+		if(normalize){
+			dstq[0] = dstq[0] / norm;
+			dstq[1] = dstq[1] / norm;
+			dstq[2] = dstq[2] / norm;
+			dstq[3] = dstq[3] / norm;
+		}
+	}
+	return norm;
+}
+
+void updateHeading(kalmanCoreData_t* this,float yaw_error){
+
+	//create rotation matrix to incorporate yaw error
+	  float R[3][3];
+	  R[0][0] = cosf(yaw_error);
+	  R[0][1] = sinf(yaw_error);
+	  R[0][2] = 0;
+
+	  R[1][0] = -sinf(yaw_error);
+	  R[1][1] = cosf(yaw_error);
+	  R[1][2] = 0;
+
+	  R[2][0] = 0;
+	  R[2][1] = 0;
+	  R[2][2] = 1;
+
+
+	  float rcpy[9]; //data for copy of current ref matrix
+	  memcpy(rcpy,(float *)(this->R),3*3*sizeof(float)); //copy ref matrix to rcpy matrix
+	  arm_matrix_instance_f32 MR= {3, 3, (float *)(this->R)}; //R ref
+	  arm_matrix_instance_f32 Mer = {3, 3, (float * ) R}; //error rotation mat in earth
+	  arm_matrix_instance_f32 Mrc = {3, 3, rcpy}; //copy of R
+	  mat_mult(&Mrc,&Mer,&MR);
+	  float qw = 0.5f * sqrtf(1+this->R[0][0] + this->R[1][1] + this->R[2][2]); //1/2 * sqrt(1 + tr(R))
+	  float denom = 4*qw;
+
+	  float qx = 1 / denom * (this->R[1][2] -this->R[2][1]);
+	  float qy = 1 / denom * (this->R[3][0] -this->R[0][3]);
+	  float qz = 1 / denom * (this->R[2][3] -this->R[3][2]);
+	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", this->q[0], this->q[1],this->q[2],this->q[3] );
+	  DEBUG_PRINT("yaw error: %f\n",yaw_error);
+	  DEBUG_PRINT("NEW QUATS: %f, %f, %f ,%f \n", qw,qx,qy,qz);
+
+
+	  // compute the quaternion values in [w,x,y,z] order
+	  float angle = arm_sqrt(yaw_error*yaw_error);
+	  float ca = arm_cos_f32(angle/2.0f);
+	  float sa = arm_sin_f32(angle/2.0f);
+	  float qerr[4] = {ca , 0 , 0 , sa*yaw_error/angle};
+
+	  float quat[4];
+	//first rotate body->earth quat, then rotate by earth heading error (q2 then q1 rotation)
+	  quatRotate(qerr,this->q,quat,true);
+	    // normalize and store the result
+
+	  this->q[0] = quat[0];
+	  this->q[1] = quat[1];
+	  this->q[2] = quat[2];
+	  this->q[3] = quat[3];
+	  DEBUG_PRINT("error quats w,x,y,z: %f, %f, %f, %f \n", quat[0], quat[1], quat[2], quat[3]);
+	  DEBUG_PRINT("Heading Updated\n");
+	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", this->q[0], this->q[1],this->q[2],this->q[3] );
+
+}
+/*this update will derotate the magnetometer vector using pitch and roll
+and then uses the atan of the x and y components to generate yaw. The
+mag measurement is decoupled from pitch and roll in order to avoid mag disturbances
+from incapacitating the controller*/
+void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
+
+    vector_t magVec = {
+      .x = 0,
+      .y = 0,
+      .z = 0,
+    };
+    vector_t earthMag = {
+      .x = 0,
+      .y = 0,
+      .z = 0,
+    };
+    //compass cal numbers found for crazyflie 1
+   float xbias = 0.1386f;
+   float ybias = 0.0662f;
+   float zbias = -0.0576f;
+   float xscale = 0.9940f;
+   float yscale = 1.0497f;
+   float zscale = 0.9603f;
+
+    float heading;
+	//convert to eulers
+	  float yaw = atan2f(2*(this->q[1]*this->q[2]+this->q[0]*this->q[3]) , this->q[0]*this->q[0] + this->q[1]*this->q[1] - this->q[2]*this->q[2] - this->q[3]*this->q[3]);
+	  float pitch = asinf(-2*(this->q[1]*this->q[3] - this->q[0]*this->q[2]));
+	  float roll = atan2f(2*(this->q[2]*this->q[3]+this->q[0]*this->q[1]) , this->q[0]*this->q[0] - this->q[1]*this->q[1] - this->q[2]*this->q[2] + this->q[3]*this->q[3]);
+
+	  mag ->x = xscale * (mag->x - xbias);
+	  mag -> y = yscale * (mag->y - ybias);
+	  mag -> z = zscale * (mag->z - zbias);
+
+/*
+	  //rotate mag vector to coordinate plane that is parallel to earths (tilt compensation)
+	  float Rd[3][3]; //detilt matrix
+	  Rd[0][0] = cosf(pitch);
+	  Rd[0][1] = sinf(pitch)*sinf(roll);
+	  Rd[0][2] = sinf(pitch)*cosf(roll);
+
+	  Rd[1][0] = 0;
+	  Rd[1][1] = cosf(roll);
+	  Rd[1][2] = - sinf(roll);
+
+	  Rd[2][0] = -sinf(pitch);
+	  Rd[2][1] = cosf(pitch)*sinf(roll);
+	  Rd[2][2] = cosf(pitch)*cosf(roll);
+
+
+	  //rotate mag vector by roll and pitch to compensate for tilt
+	  derotatedMag.x = Rd[0][0] * mag -> x + Rd[0][1] * mag -> y + Rd[0][2]  * mag -> z;
+	  derotatedMag.y = Rd[1][0] * mag -> x + Rd[1][1] * mag -> y + Rd[1][2] * mag -> z;
+	  derotatedMag.z = Rd[2][0] * mag -> x + Rd[2][1] * mag -> y + Rd[2][2] * mag->z;
+*/
+	  //rotate mag to earth frame
+	  magVec.x = mag->x;
+	  magVec.y = mag->y;
+	  magVec.z = mag->z;
+	  rotateVector(&magVec, this->R,&earthMag);
+
+	  //calculate z rotation error based on z component only
+	  heading = atan2f(earthMag.y,earthMag.x);
+
+	  //heading = atan2f(mag->y,mag->x);
+	  //DEBUG_PRINT("original, compensated: %f, %f; %f, %f \n", mag->x, mag->y, earthMag.x, earthMag.y);
+	 //DEBUG_PRINT("original, compensated: %f, %f \n", atan2f(mag->y,mag-> x) , heading);
+	  //float yaw_error = fmod(heading - (yaw) + 3.1415927f,2.0f*3.1415927f)-3.1415927f; //calc yaw error from reference yaw
+	 // DEBUG_PRINT("Est, Compass,: %f, %f, %f \n", yaw, heading,yaw_error);
+
+	  /*compute wrapped error using angle difference and atan:
+	  *theta1-theta2 = atan(sin(theta1-theta2)/cos(theta1-theta2)*/
+	    float tan_top = sinf(heading)*cosf(yaw) - cosf(heading)*sinf(yaw);
+	    float tan_bot = cosf(heading)*cosf(yaw) + sinf(heading)*sinf(yaw);
+	    float yaw_error = atan2f(tan_top,tan_bot);
+
+	    //error is leftover nonzero heading
+	    yaw_error = 0.0f - heading;
+
+	    if(!heading_updated ){
+	    	updateHeading(this,yaw_error);
+	    	yaw_error = 0;
+
+	    }
+	   /*
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	  //find matrix inverse of current ref matrix
+
+	  float rcpy[9]; //data for copy of current ref matrix
+	  memcpy(rcpy,(float *)(this->R),3*3*sizeof(float)); //copy ref matrix to rcpy matrix
+	  arm_matrix_instance_f32 Rm = {3, 3, rcpy}; //create matrix
+
+	  //destination matrix
+	  float r[9];
+	  arm_matrix_instance_f32 R_inv = {3,3,r};
+
+	  mat_inv(&Rm,&R_inv);
+
+	  arm_matrix_instance_f32 R_orig = {3, 3, (float *) (this->R)};
+
+	  //error rotation mat
+	  float Rerr[3][3];
+	  arm_matrix_instance_f32 MRerr= {3, 3, (float *) Rerr};
+
+	  arm_matrix_instance_f32 MRnew = {3,3, (float *) R}; //matrix of yaw error rot matrix
+	  mat_mult(&R_inv,&MRnew,&MRerr); //R-1*Rerr = Rerr_body
+
+	  float theta;
+
+	  float denom = Rerr[0][0]+Rerr[1][1]+Rerr[2][2] +1;
+
+	  float error_vec[3]; //this should actually be rodriguez parameters
+	  error_vec[0] = 1 / denom * (Rerr[1][2] - Rerr[2][1]);
+	  error_vec[1] = 1 / denom * (Rerr[2][0] - Rerr[0][2]);
+	  error_vec[2] = 1 / denom * (Rerr[0][1] - Rerr[1][0]);
+	 // DEBUG_PRINT("Tr - 1, THETA: %f, %f \n",0.5f*((Rerr[0][0]+Rerr[1][1]+Rerr[2][2])-1),theta);
+	 // DEBUG_PRINT("Error Vec: %f, %f, %f \n",error_vec[0], error_vec[1], error_vec[2]);
+	 // DEBUG_PRINT("\n");
+
+	   //rotateVector(mag,this->R,&derotatedMag);
+
+
+	  */
+	  if(heading_updated){
+		  // compute the quaternion values in [w,x,y,z] order
+		  float angle = arm_sqrt(yaw_error*yaw_error);
+		  float ca = arm_cos_f32(angle/2.0f);
+		  float sa = arm_sin_f32(angle/2.0f);
+		  float qerr[4] = {ca , 0 , 0 , sa*yaw_error/angle};
+
+
+		  float quat[4];
+		//first rotate body->earth quat, then rotate by earth heading error (q2 then q1 rotation)
+		  quatRotate(qerr,this->q,quat,true);
+		  //invert body pred quat
+		  float q_inv[4]={(this->q[0]),-(this->q[1]),-(this->q[2]), - (this->q[3])};
+
+		  //find difference (delta to get from pred quat to measured quat)
+		  quatRotate(q_inv,quat,quat,true);
+		  /*
+		  //q' * qerr * q
+		  quatRotate(q_inv,qerr,quat);
+		  quatRotate(quat,this->q,quat);*/
+		 // quatRotate(qerr,this->q,quat,false);
+		  //quatRotate(q_inv,quat,quat,true);
+		  //convert to rodriguez params
+		 // quat[0] = qerr[0];
+		  //quat[1] = qerr[1];
+		 // quat[2] = qerr[2];
+		  //quat[3] = qerr[3];
+		  angle = 2*acosf(quat[0]);
+		  //angle = arm_sqrt(yaw_error*yaw_error);
+		  float ta = tanf(angle/2.0f);
+		  float norm = arm_sqrt(quat[1]*quat[1] + quat[2]*quat[2] + quat[3]*quat[3]);
+		  float rod[3] = {quat[1]*ta/norm,quat[2]*ta/norm,quat[3]*ta/norm};
+
+		  //DEBUG_PRINT("Quats: %f, %f, %f, %f\n",quat[0], quat[1], quat[2],quat[3]);
+		  //DEBUG_PRINT("yaw error: %f, angle: %f\n",yaw_error, angle);
+		  //DEBUG_PRINT("Rod Params: %f, %f, %f \n",rod[0], rod[1], rod[2]);
+		  for (int i=0; i<3; i++) {
+
+			float h[KC_STATE_DIM] = {0};
+			arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+			h[KC_STATE_D0+i] = 1;
+
+			float error = rod[i];
+
+
+			scalarUpdate(this, &H, error, 0.005f);
+		  }
+	  }
+/*
+	  if(heading_updated){
+		  // do a scalar update for each state, since this should be faster than updating all together
+		  for (int i=0; i<3; i++) {
+
+			float h[KC_STATE_DIM] = {0};
+			arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+			h[KC_STATE_D0+i] = 1;
+
+			float error = rod[i];
+
+
+			scalarUpdate(this, &H, error, 0.1f);
+		  }
+	  }*/
+	  heading_updated = true;
+
+	    float h[KC_STATE_DIM] = {0};
+	    h[KC_STATE_D0] = this->R[0][2];
+	    h[KC_STATE_D1] = this->R[1][2];
+	    h[KC_STATE_D2] = this->R[2][2];
+	    float error = -sinf(yaw_error)/(1+cosf(yaw_error));
+	    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+	    //scalarUpdate(this, &H, 0.0f-heading, 0.05f);
+	    //scalarUpdate(this, &H, yaw_error, 0.05f);
+	    	/*
+	    DEBUG_PRINT("yaw: %f, Heading: %f \n", yaw, heading);
+	    DEBUG_PRINT("euler error, rod error: %f, %f \n",yaw_error,yaw_error);
+	    DEBUG_PRINT("H: %f, %f, %f \n",this->R[0][2],this->R[1][2],this->R[2][2]);
+	    DEBUG_PRINT("state error: %f, %f, %f\n",this->S[KC_STATE_D0],this->S[KC_STATE_D1],this->S[KC_STATE_D2]);
+	    DEBUG_PRINT("\n"); */
+}
 void kalmanCoreUpdateWithBaro(kalmanCoreData_t* this, baro_t *baro, bool quadIsFlying)
 {
   float h[KC_STATE_DIM] = {0};
@@ -326,41 +658,6 @@ void kalmanCoreUpdateWithPosition(kalmanCoreData_t* this, positionMeasurement_t 
     arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
     h[KC_STATE_X+i] = 1;
     scalarUpdate(this, &H, xyz->pos[i] - this->S[KC_STATE_X+i], xyz->stdDev);
-  }
-}
-
-void kalmanCoreUpdateWithPose(kalmanCoreData_t* this, poseMeasurement_t *pose)
-{
-  // a direct measurement of states x, y, and z, and orientation
-  // do a scalar update for each state, since this should be faster than updating all together
-  for (int i=0; i<3; i++) {
-    float h[KC_STATE_DIM] = {0};
-    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
-    h[KC_STATE_X+i] = 1;
-    scalarUpdate(this, &H, pose->pos[i] - this->S[KC_STATE_X+i], pose->stdDevPos);
-  }
-
-  // compute orientation error
-  struct quat const q_ekf = mkquat(this->q[1], this->q[2], this->q[3], this->q[0]);
-  struct quat const q_measured = mkquat(pose->quat.x, pose->quat.y, pose->quat.z, pose->quat.w);
-  struct quat const q_residual = qqmul(qinv(q_ekf), q_measured);
-  // small angle approximation, see eq. 141 in http://mars.cs.umn.edu/tr/reports/Trawny05b.pdf
-  struct vec const err_quat = vscl(2.0f / q_residual.w, quatimagpart(q_residual));
-
-  // do a scalar update for each state
-  {
-    float h[KC_STATE_DIM] = {0};
-    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
-    h[KC_STATE_D0] = 1;
-    scalarUpdate(this, &H, err_quat.x, pose->stdDevQuat);
-    h[KC_STATE_D0] = 0;
-
-    h[KC_STATE_D1] = 1;
-    scalarUpdate(this, &H, err_quat.y, pose->stdDevQuat);
-    h[KC_STATE_D1] = 0;
-
-    h[KC_STATE_D2] = 1;
-    scalarUpdate(this, &H, err_quat.z, pose->stdDevQuat);
   }
 }
 
@@ -681,6 +978,7 @@ void kalmanCorePredict(kalmanCoreData_t* this, float cmdThrust, Axis3f *acc, Axi
    * As derived in "Covariance Correction Step for Kalman Filtering with an Attitude"
    * http://arc.aiaa.org/doi/abs/10.2514/1.G000848
    */
+
   float d0 = gyro->x*dt/2;
   float d1 = gyro->y*dt/2;
   float d2 = gyro->z*dt/2;
@@ -780,20 +1078,20 @@ void kalmanCorePredict(kalmanCoreData_t* this, float cmdThrust, Axis3f *acc, Axi
   float tmpq2;
   float tmpq3;
 
-  // rotate the quad's attitude by the delta quaternion vector computed above
-  tmpq0 = dq[0]*this->q[0] - dq[1]*this->q[1] - dq[2]*this->q[2] - dq[3]*this->q[3];
-  tmpq1 = dq[1]*this->q[0] + dq[0]*this->q[1] + dq[3]*this->q[2] - dq[2]*this->q[3];
-  tmpq2 = dq[2]*this->q[0] - dq[3]*this->q[1] + dq[0]*this->q[2] + dq[1]*this->q[3];
-  tmpq3 = dq[3]*this->q[0] + dq[2]*this->q[1] - dq[1]*this->q[2] + dq[0]*this->q[3];
-
-  if (! quadIsFlying) {
-    float keep = 1.0f - ROLLPITCH_ZERO_REVERSION;
-
-    tmpq0 = keep * tmpq0 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[0];
-    tmpq1 = keep * tmpq1 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[1];
-    tmpq2 = keep * tmpq2 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[2];
-    tmpq3 = keep * tmpq3 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[3];
+  if (quadIsFlying) {
+    // rotate the quad's attitude by the delta quaternion vector computed above
+    tmpq0 = (dq[0]*this->q[0] - dq[1]*this->q[1] - dq[2]*this->q[2] - dq[3]*this->q[3]);
+    tmpq1 = (1.0f)*(dq[1]*this->q[0] + dq[0]*this->q[1] + dq[3]*this->q[2] - dq[2]*this->q[3]);
+    tmpq2 = (1.0f)*(dq[2]*this->q[0] - dq[3]*this->q[1] + dq[0]*this->q[2] + dq[1]*this->q[3]);
+    tmpq3 = (1.0f)*(dq[3]*this->q[0] + dq[2]*this->q[1] - dq[1]*this->q[2] + dq[0]*this->q[3]);
+  } else {
+    // rotate the quad's attitude by the delta quaternion vector computed above
+    tmpq0 = (dq[0]*this->q[0] - dq[1]*this->q[1] - dq[2]*this->q[2] - dq[3]*this->q[3]);
+    tmpq1 = (1.0f-ROLLPITCH_ZERO_REVERSION)*(dq[1]*this->q[0] + dq[0]*this->q[1] + dq[3]*this->q[2] - dq[2]*this->q[3]);
+    tmpq2 = (1.0f-ROLLPITCH_ZERO_REVERSION)*(dq[2]*this->q[0] - dq[3]*this->q[1] + dq[0]*this->q[2] + dq[1]*this->q[3]);
+    tmpq3 = (1.0f-ROLLPITCH_ZERO_REVERSION)*(dq[3]*this->q[0] + dq[2]*this->q[1] - dq[1]*this->q[2] + dq[0]*this->q[3]);
   }
+
 
   // normalize and store the result
   float norm = arm_sqrt(tmpq0*tmpq0 + tmpq1*tmpq1 + tmpq2*tmpq2 + tmpq3*tmpq3);
@@ -855,10 +1153,12 @@ void kalmanCoreFinalize(kalmanCoreData_t* this, sensorData_t *sensors, uint32_t 
   float v1 = this->S[KC_STATE_D1];
   float v2 = this->S[KC_STATE_D2];
 
+
   // Move attitude error into attitude if any of the angle errors are large enough
   if ((fabsf(v0) > 0.1e-3f || fabsf(v1) > 0.1e-3f || fabsf(v2) > 0.1e-3f) && (fabsf(v0) < 10 && fabsf(v1) < 10 && fabsf(v2) < 10))
   {
-    float angle = arm_sqrt(v0*v0 + v1*v1 + v2*v2);
+	 //DEBUG_PRINT("Error At Kalman finalize: %f, %,f %f \n",v0, v1, v2);
+	float angle = arm_sqrt(v0*v0 + v1*v1 + v2*v2);
     float ca = arm_cos_f32(angle / 2.0f);
     float sa = arm_sin_f32(angle / 2.0f);
     float dq[4] = {ca, sa * v0 / angle, sa * v1 / angle, sa * v2 / angle};
@@ -1058,5 +1358,4 @@ PARAM_GROUP_START(kalman)
   PARAM_ADD(PARAM_FLOAT, initialX, &initialX)
   PARAM_ADD(PARAM_FLOAT, initialY, &initialY)
   PARAM_ADD(PARAM_FLOAT, initialZ, &initialZ)
-  PARAM_ADD(PARAM_FLOAT, initialYaw, &initialYaw)
 PARAM_GROUP_STOP(kalman)

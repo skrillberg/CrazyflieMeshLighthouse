@@ -70,10 +70,11 @@
 #include "log.h"
 #include "param.h"
 #include "physicalConstants.h"
+#include "debug.h"
 
-
+#include "cfassert.h"
 // #define KALMAN_USE_BARO_UPDATE
-
+//#define KALMAN_DECOUPLE_XY //decouple xy so filter doesn't explode
 
 /**
  * Additionally, the filter supports the incorporation of additional sensors into the state estimate
@@ -85,6 +86,23 @@
  *
  * As well as by the following internal functions and datatypes
  */
+
+//mimsy cooperative lighthouse measurements
+static xQueueHandle mlhDataQueue;
+static state_t external_state;
+#define MLH_QUEUE_LENGTH (10)
+
+static inline bool stateEstimatorHasMimsyLighthouseMeasurement(mlhMeasurement_t *mlh){
+	return (pdTRUE == xQueueReceive(mlhDataQueue, mlh, 0));
+}
+
+//magnetometer measurements
+static xQueueHandle magDataQueue;
+#define MAG_QUEUE_LENGTH (10)
+
+static inline bool stateEstimatorHasMagMeasurment(magMeasurement_t *mag){
+	return (pdTRUE == xQueueReceive(magDataQueue, mag, 0));
+}
 
 // Distance-to-point measurements
 static xQueueHandle distDataQueue;
@@ -100,14 +118,6 @@ static xQueueHandle posDataQueue;
 
 static inline bool stateEstimatorHasPositionMeasurement(positionMeasurement_t *pos) {
   return (pdTRUE == xQueueReceive(posDataQueue, pos, 0));
-}
-
-// Direct measurements of Crazyflie pose
-static xQueueHandle poseDataQueue;
-#define POSE_QUEUE_LENGTH (10)
-
-static inline bool stateEstimatorHasPoseMeasurement(poseMeasurement_t *pose) {
-  return (pdTRUE == xQueueReceive(poseDataQueue, pose, 0));
 }
 
 // Measurements of a UWB Tx/Rx
@@ -156,8 +166,10 @@ static inline bool stateEstimatorHasHeightPacket(heightMeasurement_t *height) {
 /**
  * Tuning parameters
  */
-#define PREDICT_RATE RATE_100_HZ // this is slower than the IMU update rate of 500Hz
+//#define PREDICT_RATE RATE_100_HZ // this is slower than the IMU update rate of 500Hz
+#define PREDICT_RATE RATE_25_HZ
 #define BARO_RATE RATE_25_HZ
+#define MAG_RATE RATE_25_HZ
 
 // the point at which the dynamics change from stationary to flying
 #define IN_FLIGHT_THRUST_THRESHOLD (GRAVITY_MAGNITUDE*0.1f)
@@ -190,6 +202,8 @@ static kalmanCoreData_t coreData;
 static bool isInit = false;
 static int32_t lastPrediction;
 static int32_t lastBaroUpdate;
+static int32_t lastMagUpdate; //added by kilberg, for mag updates
+static int32_t lastMlhUpdate;// added by kilberg for mlh updates
 static int32_t lastPNUpdate;
 static Axis3f accAccumulator;
 static float thrustAccumulator;
@@ -204,6 +218,8 @@ static int32_t lastTDOAUpdate;
 static uint32_t lastFlightCmd;
 static uint32_t takeoffTime;
 
+static Axis3f magAccumulator; //added by kilberg for magnetometer data
+static uint32_t magAccumulatorCount;
 /**
  * Supporting and utility functions
  */
@@ -233,7 +249,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
   uint32_t osTick = xTaskGetTickCount(); // would be nice if this had a precision higher than 1ms...
 
 #ifdef KALMAN_DECOUPLE_XY
-  kalmanCoreDecoupleXY(this);
+  kalmanCoreDecoupleXY(&coreData);
 #endif
 
   // Average the last IMU measurements. We do this because the prediction loop is
@@ -252,6 +268,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     gyroAccumulator.z += sensors->gyro.z;
     gyroAccumulatorCount++;
   }
+
 
   // Average the thrust command from the last time steps, generated externally by the controller
   thrustAccumulator += control->thrust;
@@ -281,6 +298,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     accAccumulator.y /= accAccumulatorCount;
     accAccumulator.z /= accAccumulatorCount;
 
+
     // thrust is in grams, we need ms^-2
     thrustAccumulator *= CONTROL_TO_ACC;
 
@@ -308,6 +326,8 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     thrustAccumulator = 0;
     thrustAccumulatorCount = 0;
 
+
+
     doneUpdate = true;
   }
 
@@ -318,6 +338,33 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
   kalmanCoreAddProcessNoise(&coreData, (float)(osTick-lastPNUpdate)/configTICK_RATE_HZ);
   lastPNUpdate = osTick;
 
+  if (sensorsReadMag(&sensors->mag)){
+	  magAccumulator.x += sensors->mag.x;
+	  magAccumulator.y += sensors->mag.y;
+	  magAccumulator.z += sensors->mag.z;
+	  magAccumulatorCount++;
+  }
+
+  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/1// update at
+        && magAccumulatorCount > 0){
+	  //mag accumulator update
+	  magAccumulator.x /= magAccumulatorCount;
+	  magAccumulator.y /= magAccumulatorCount;
+	  magAccumulator.z /= magAccumulatorCount;
+
+	  //DEBUG_PRINT("mag x, y, z:, %f, %f, %f \n", magAccumulator.x, magAccumulator.y, magAccumulator.z);
+	  magMeasurement_t mag;
+	  mag.x = magAccumulator.x;
+	  mag.y = magAccumulator.y;
+	  mag.z = magAccumulator.z;
+
+	  kalmanCoreUpdateWithMag(&coreData, &mag);
+		//added by kilberg
+	  magAccumulator = (Axis3f){.axis={0}};
+	  magAccumulatorCount = 0;
+	  lastMagUpdate =  osTick;
+	  doneUpdate= true;
+  }
 
 
   /**
@@ -348,6 +395,19 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
    * Sensor measurements can come in sporadically and faster than the stabilizer loop frequency,
    * we therefore consume all measurements since the last loop, rather than accumulating
    */
+  mlhMeasurement_t mlh;
+  while(stateEstimatorHasMimsyLighthouseMeasurement(&mlh)){
+	  DEBUG_PRINT("\n");
+	  DEBUG_PRINT("MLH Packet, x, y, phi, t: %f, %f, %f, %f \n",mlh.x, mlh.y, mlh.heading, mlh.measTime);
+	  //mlh.x = 1.0f;
+	  //mlh.y = 1.0f;
+	  //mlh.heading = 0.8f;
+	  kalmanCoreUpdateWithMlh(&coreData, &mlh);
+		//added by kilberg
+
+	  lastMlhUpdate =  osTick;
+	  doneUpdate= true;
+  }
 
   tofMeasurement_t tof;
   while (stateEstimatorHasTOFPacket(&tof))
@@ -377,13 +437,6 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     doneUpdate = true;
   }
 
-  poseMeasurement_t pose;
-  while (stateEstimatorHasPoseMeasurement(&pose))
-  {
-    kalmanCoreUpdateWithPose(&coreData, &pose);
-    doneUpdate = true;
-  }
-
   tdoaMeasurement_t tdoa;
   while (stateEstimatorHasTDOAPacket(&tdoa))
   {
@@ -408,6 +461,8 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
   if (doneUpdate)
   {
     kalmanCoreFinalize(&coreData, sensors, osTick);
+
+
   }
 
   /**
@@ -415,6 +470,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
    * This is done every round, since the external state includes some sensor data
    */
   kalmanCoreExternalizeState(&coreData, state, sensors, osTick);
+  external_state = *state;
 }
 
 
@@ -438,24 +494,33 @@ void estimatorKalmanInit(void) {
   {
     distDataQueue = xQueueCreate(DIST_QUEUE_LENGTH, sizeof(distanceMeasurement_t));
     posDataQueue = xQueueCreate(POS_QUEUE_LENGTH, sizeof(positionMeasurement_t));
-    poseDataQueue = xQueueCreate(POSE_QUEUE_LENGTH, sizeof(poseMeasurement_t));
     tdoaDataQueue = xQueueCreate(UWB_QUEUE_LENGTH, sizeof(tdoaMeasurement_t));
     flowDataQueue = xQueueCreate(FLOW_QUEUE_LENGTH, sizeof(flowMeasurement_t));
     tofDataQueue = xQueueCreate(TOF_QUEUE_LENGTH, sizeof(tofMeasurement_t));
     heightDataQueue = xQueueCreate(HEIGHT_QUEUE_LENGTH, sizeof(heightMeasurement_t));
+
+    //added by BK for mimsy lighthouse measurements
+    magDataQueue = xQueueCreate(MAG_QUEUE_LENGTH, sizeof(magMeasurement_t));
+    mlhDataQueue = xQueueCreate(MLH_QUEUE_LENGTH,  sizeof(mlhMeasurement_t));
+    printAssertSnapshotData();
   }
   else
   {
     xQueueReset(distDataQueue);
     xQueueReset(posDataQueue);
-    xQueueReset(poseDataQueue);
     xQueueReset(tdoaDataQueue);
     xQueueReset(flowDataQueue);
     xQueueReset(tofDataQueue);
+
+    //added by BK for mimsy lighthouse measurements
+	xQueueReset(magDataQueue);
+    xQueueReset(mlhDataQueue);
   }
 
   lastPrediction = xTaskGetTickCount();
   lastBaroUpdate = xTaskGetTickCount();
+  lastMagUpdate = xTaskGetTickCount(); //added by kilberg for mag updates
+  lastMlhUpdate = xTaskGetTickCount(); //added by kilberg for mlh updates
   lastTDOAUpdate = xTaskGetTickCount();
   lastPNUpdate = xTaskGetTickCount();
 
@@ -492,6 +557,19 @@ static bool stateEstimatorEnqueueExternalMeasurement(xQueueHandle queue, void *m
   return (result==pdTRUE);
 }
 
+// added by kilberg for cooperative mimsy lighthouse measurements
+bool estimatorKalmanEnqueueMimsyLighthouse(const mlhMeasurement_t *mlh){
+	ASSERT(isInit);
+	DEBUG_PRINT("In estimatorKalmanEnqueueMlh mlh.x: %f, mlh.y %f, mlh.heading: %f, mlh.measTime: %f\n", mlh->x, mlh->y, mlh->heading, mlh->measTime);
+	return stateEstimatorEnqueueExternalMeasurement(mlhDataQueue, (void *)mlh);
+}
+
+//added by kilberg for mag measurements
+bool estimatorKalmanEnqueueMag(const magMeasurement_t *mag){
+	ASSERT(isInit);
+	return stateEstimatorEnqueueExternalMeasurement(magDataQueue, (void *)mag);
+}
+
 bool estimatorKalmanEnqueueTDOA(const tdoaMeasurement_t *uwb)
 {
   ASSERT(isInit);
@@ -502,12 +580,6 @@ bool estimatorKalmanEnqueuePosition(const positionMeasurement_t *pos)
 {
   ASSERT(isInit);
   return stateEstimatorEnqueueExternalMeasurement(posDataQueue, (void *)pos);
-}
-
-bool estimatorKalmanEnqueuePose(const poseMeasurement_t *pose)
-{
-  ASSERT(isInit);
-  return stateEstimatorEnqueueExternalMeasurement(poseDataQueue, (void *)pose);
 }
 
 bool estimatorKalmanEnqueueDistance(const distanceMeasurement_t *dist)
@@ -537,6 +609,7 @@ bool estimatorKalmanEnqueueAbsoluteHeight(const heightMeasurement_t *height)
   return stateEstimatorEnqueueExternalMeasurement(heightDataQueue, (void *)height);
 }
 
+
 bool estimatorKalmanTest(void)
 {
   return isInit;
@@ -546,6 +619,12 @@ void estimatorKalmanGetEstimatedPos(point_t* pos) {
   pos->x = coreData.S[KC_STATE_X];
   pos->y = coreData.S[KC_STATE_Y];
   pos->z = coreData.S[KC_STATE_Z];
+}
+
+void estimatorKalmanGetEstimatedYaw(float* yaw ){
+
+	*yaw = external_state.attitude.yaw;
+
 }
 
 // Temporary development groups

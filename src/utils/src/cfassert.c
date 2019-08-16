@@ -52,6 +52,10 @@ SNAPSHOT_DATA snapshot __attribute__((section(".nzds"))) = {
 
 void assertFail(char *exp, char *file, int line)
 {
+  DEBUG_PRINT("Assert failed %s:%d\n", file, line);
+  for(int i = 0; i < 100000000; i++){
+
+  }
   portDISABLE_INTERRUPTS();
   storeAssertSnapshotData(file, line);
   DEBUG_PRINT("Assert failed %s:%d\n", file, line);

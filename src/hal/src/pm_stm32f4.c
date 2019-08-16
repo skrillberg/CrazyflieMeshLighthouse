@@ -287,7 +287,7 @@ void pmTask(void *param)
   batteryCriticalLowTimeStamp = tickCount;
 
   pmSetChargeState(charge500mA);
-  systemWaitStart();
+  vTaskDelay(500);
 
   while(1)
   {

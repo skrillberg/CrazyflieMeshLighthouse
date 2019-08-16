@@ -101,6 +101,13 @@ void kalmanCoreInit(kalmanCoreData_t* this);
 
 /*  - Measurement updates based on sensors */
 
+//mimsy lighthouse
+void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh);
+
+
+//magnetometer
+void kalmanCoreUpdateWithMag(kalmanCoreData_t * this, magMeasurement_t* mag);
+
 // Barometer
 void kalmanCoreUpdateWithBaro(kalmanCoreData_t* this, baro_t *baro, bool quadIsFlying);
 
@@ -109,9 +116,6 @@ void kalmanCoreUpdateWithAbsoluteHeight(kalmanCoreData_t* this, heightMeasuremen
 
 // Direct measurements of Crazyflie position
 void kalmanCoreUpdateWithPosition(kalmanCoreData_t* this, positionMeasurement_t *xyz);
-
-// Direct measurements of Crazyflie pose
-void kalmanCoreUpdateWithPose(kalmanCoreData_t* this, poseMeasurement_t *pose);
 
 // Distance-to-point measurements
 void kalmanCoreUpdateWithDistance(kalmanCoreData_t* this, distanceMeasurement_t *d);

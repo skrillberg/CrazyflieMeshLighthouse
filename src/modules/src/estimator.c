@@ -18,11 +18,12 @@ typedef struct {
   const char* name;
   bool (*estimatorEnqueueTDOA)(const tdoaMeasurement_t *uwb);
   bool (*estimatorEnqueuePosition)(const positionMeasurement_t *pos);
-  bool (*estimatorEnqueuePose)(const poseMeasurement_t *pose);
   bool (*estimatorEnqueueDistance)(const distanceMeasurement_t *dist);
   bool (*estimatorEnqueueTOF)(const tofMeasurement_t *tof);
   bool (*estimatorEnqueueAbsoluteHeight)(const heightMeasurement_t *height);
   bool (*estimatorEnqueueFlow)(const flowMeasurement_t *flow);
+  bool (*estimatorEnqueueMag)(const magMeasurement_t *mag);
+  bool (*estimatorEnqueueMimsyLighthouse)(const mlhMeasurement_t *mlh);
 } EstimatorFcns;
 
 #define NOT_IMPLEMENTED ((void*)0)
@@ -35,11 +36,13 @@ static EstimatorFcns estimatorFunctions[] = {
     .name = "None",
     .estimatorEnqueueTDOA = NOT_IMPLEMENTED,
     .estimatorEnqueuePosition = NOT_IMPLEMENTED,
-    .estimatorEnqueuePose = NOT_IMPLEMENTED,
     .estimatorEnqueueDistance = NOT_IMPLEMENTED,
     .estimatorEnqueueTOF = NOT_IMPLEMENTED,
     .estimatorEnqueueAbsoluteHeight = NOT_IMPLEMENTED,
     .estimatorEnqueueFlow = NOT_IMPLEMENTED,
+	.estimatorEnqueueMimsyLighthouse = NOT_IMPLEMENTED,
+	.estimatorEnqueueMag = NOT_IMPLEMENTED,
+
   }, // Any estimator
   {
     .init = estimatorComplementaryInit,
@@ -48,11 +51,12 @@ static EstimatorFcns estimatorFunctions[] = {
     .name = "Complementary",
     .estimatorEnqueueTDOA = NOT_IMPLEMENTED,
     .estimatorEnqueuePosition = NOT_IMPLEMENTED,
-    .estimatorEnqueuePose = NOT_IMPLEMENTED,
     .estimatorEnqueueDistance = NOT_IMPLEMENTED,
     .estimatorEnqueueTOF = NOT_IMPLEMENTED,
     .estimatorEnqueueAbsoluteHeight = NOT_IMPLEMENTED,
     .estimatorEnqueueFlow = NOT_IMPLEMENTED,
+	.estimatorEnqueueMimsyLighthouse = NOT_IMPLEMENTED,
+	.estimatorEnqueueMag = NOT_IMPLEMENTED,
   },
   {
     .init = estimatorKalmanInit,
@@ -61,11 +65,12 @@ static EstimatorFcns estimatorFunctions[] = {
     .name = "Kalman",
     .estimatorEnqueueTDOA = estimatorKalmanEnqueueTDOA,
     .estimatorEnqueuePosition = estimatorKalmanEnqueuePosition,
-    .estimatorEnqueuePose = estimatorKalmanEnqueuePose,
     .estimatorEnqueueDistance = estimatorKalmanEnqueueDistance,
     .estimatorEnqueueTOF = estimatorKalmanEnqueueTOF,
     .estimatorEnqueueAbsoluteHeight = estimatorKalmanEnqueueAbsoluteHeight,
     .estimatorEnqueueFlow = estimatorKalmanEnqueueFlow,
+	.estimatorEnqueueMimsyLighthouse = estimatorKalmanEnqueueMimsyLighthouse,
+	.estimatorEnqueueMag = estimatorKalmanEnqueueMag,
     },
 };
 
@@ -113,6 +118,14 @@ const char* stateEstimatorGetName() {
 }
 
 
+bool estimatorEnqueueMimsyLighthouse(const mlhMeasurement_t *mlh) {
+  if (estimatorFunctions[currentEstimator].estimatorEnqueueMimsyLighthouse) {
+    return estimatorFunctions[currentEstimator].estimatorEnqueueMimsyLighthouse(mlh);
+  }
+
+  return false;
+}
+
 bool estimatorEnqueueTDOA(const tdoaMeasurement_t *uwb) {
   if (estimatorFunctions[currentEstimator].estimatorEnqueueTDOA) {
     return estimatorFunctions[currentEstimator].estimatorEnqueueTDOA(uwb);
@@ -124,14 +137,6 @@ bool estimatorEnqueueTDOA(const tdoaMeasurement_t *uwb) {
 bool estimatorEnqueuePosition(const positionMeasurement_t *pos) {
   if (estimatorFunctions[currentEstimator].estimatorEnqueuePosition) {
     return estimatorFunctions[currentEstimator].estimatorEnqueuePosition(pos);
-  }
-
-  return false;
-}
-
-bool estimatorEnqueuePose(const poseMeasurement_t *pose) {
-  if (estimatorFunctions[currentEstimator].estimatorEnqueuePose) {
-    return estimatorFunctions[currentEstimator].estimatorEnqueuePose(pose);
   }
 
   return false;

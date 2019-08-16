@@ -114,7 +114,7 @@ static int itoa10(putc_t putcf, long long int num, int precision)
     }
   }
 
-  return itoa10Unsigned(putcf, n) + len;
+  return itoa10Unsigned(putcf, n);
 }
 
 static int itoa16(putc_t putcf, uint64_t num, int width, char padChar)
@@ -286,10 +286,6 @@ int evprintf(putc_t putcf, char * fmt, va_list ap)
             putcf(*str++);
             len++;
           }
-          break;
-        case 'c':
-          putcf((char)va_arg(ap, int));
-          len++;
           break;
         default:
           break;
