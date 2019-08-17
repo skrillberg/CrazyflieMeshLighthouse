@@ -4,7 +4,6 @@ build_info.json
 bin/*
 .cproject
 .project
-.pydevproject
 .settings/*
 .vscode/*
 *~
@@ -21,10 +20,3 @@ tags
 **/__pycache__/**
 
 current_platform.mk
-
-# generated files for githubpages
-/docs/_site/*
-/docs/Gemfile.lock
-
-
-/docs/.jekyll-metadata

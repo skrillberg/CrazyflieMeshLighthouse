@@ -323,7 +323,7 @@ void processAccGyroMeasurements(const uint8_t *buffer)
 
 static void sensorsDeviceInit(void)
 {
-  isMagnetometerPresent = false;
+  isMagnetometerPresent = true;
   isBarometerPresent = false;
 
   // Wait for sensors to startup

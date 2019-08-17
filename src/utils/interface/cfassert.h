@@ -23,7 +23,7 @@
  *
  * cfassert.h - Assert macro
  */
-
+#define DEBUG
 #include "console.h"
 
 #ifndef __CFASSERT_H__

@@ -135,7 +135,7 @@
 #define MEM_TASK_STACKSIZE            (2 * configMINIMAL_STACK_SIZE)
 #define PARAM_TASK_STACKSIZE          configMINIMAL_STACK_SIZE
 #define SENSORS_TASK_STACKSIZE        (2 * configMINIMAL_STACK_SIZE)
-#define STABILIZER_TASK_STACKSIZE     (3 * configMINIMAL_STACK_SIZE)
+#define STABILIZER_TASK_STACKSIZE     (6 * configMINIMAL_STACK_SIZE) //originally was 3 but i ran into ram issues
 #define NRF24LINK_TASK_STACKSIZE      configMINIMAL_STACK_SIZE
 #define ESKYLINK_TASK_STACKSIZE       configMINIMAL_STACK_SIZE
 #define SYSLINK_TASK_STACKSIZE        configMINIMAL_STACK_SIZE
@@ -183,7 +183,7 @@
  * \def PRINT_OS_DEBUG_INFO
  * Print with an interval information about freertos mem/stack usage to console.
  */
-//#define PRINT_OS_DEBUG_INFO
+#define PRINT_OS_DEBUG_INFO
 
 
 //Debug defines

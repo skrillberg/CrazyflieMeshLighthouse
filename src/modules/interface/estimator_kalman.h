@@ -67,12 +67,14 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
  */
 bool estimatorKalmanEnqueueTDOA(const tdoaMeasurement_t *uwb);
 bool estimatorKalmanEnqueuePosition(const positionMeasurement_t *pos);
-bool estimatorKalmanEnqueuePose(const poseMeasurement_t *pose);
 bool estimatorKalmanEnqueueDistance(const distanceMeasurement_t *dist);
 bool estimatorKalmanEnqueueTOF(const tofMeasurement_t *tof);
 bool estimatorKalmanEnqueueAbsoluteHeight(const heightMeasurement_t *height);
 bool estimatorKalmanEnqueueFlow(const flowMeasurement_t *flow);
+bool estimatorKalmanEnqueueMimsyLighthouse(const mlhMeasurement_t *mlh);
+bool estimatorKalmanEnqueueMag(const magMeasurement_t *mag);
 
 void estimatorKalmanGetEstimatedPos(point_t* pos);
+void estimatorKalmanGetEstimatedYaw(float* yaw );
 
 #endif // __ESTIMATOR_KALMAN_H__
