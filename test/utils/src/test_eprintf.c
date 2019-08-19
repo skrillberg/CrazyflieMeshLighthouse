@@ -216,16 +216,6 @@ void testThatDoubleWithPrecisionIsPrinted() {
   verifyStdio("Some %.2f text", val);
 }
 
-void testThatCharIsPrinted() {
-  // Fixture
-  char val1 = 'z';
-  char val2 = 'c';
-
-  // Test
-  // Assert
-  verifyStdio("Bitcra%ce ro%cks!", val1, val2);
-}
-
 void testThatMultipleParamsArePrinted() {
   // Fixture
 
@@ -264,24 +254,24 @@ static int putcMock(int c) {
 }
 
 static void verifyStdio(char* format, ...) {
-  // Fixture
   reset();
   va_list ap;
+
+  // Fixture
   char* expected[100];
 
   // Trust sprintf() to be correct
   va_start(ap, format);
-  int expected_len = vsprintf((char*)expected, format, ap);
+  vsprintf((char*)expected, format, ap);
   va_end(ap);
 
   // Test
   va_start(ap, format);
-  int actual_len = evprintf(putcMock, format, ap);
+  evprintf(putcMock, format, ap);
   va_end(ap);
 
   // Assert
   TEST_ASSERT_EQUAL_STRING(expected, actual);
-  TEST_ASSERT_EQUAL_INT(expected_len, actual_len);
 }
 
 static void verify(char* expected, char* format, ...) {

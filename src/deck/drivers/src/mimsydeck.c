@@ -332,7 +332,9 @@ static void mimsydeckInit()
 
 	//commanderInit();
     xTaskCreate(mimsydeckTask, "mimsy", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-    xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+    //xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+    //xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+
     isInit = true;
 }
 
