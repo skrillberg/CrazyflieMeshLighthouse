@@ -15,7 +15,7 @@
 #include "system.h"
 #include "config.h"
 #include "estimator.h"
-#include "openserial.h"
+//#include "openserial.h"
 #include "estimator_kalman.h"
 
 static void handleLighthousePacket(uint8_t * packet);
@@ -36,9 +36,9 @@ static void mimsyStateTask(void *param){
 		vTaskDelayUntil(&xLastWakeTime, period_ticks);
 		uart1Putchar(uchar);
 		//get state information from estimator
-		estimatorKalmanGetEstimatedYaw(yaw);
-		estimatorKalmanGetEstimatedPos(pos);
-		DEBUG_PRINT("yaw: %f, x: %f, y: %f \n", yaw);
+		//estimatorKalmanGetEstimatedYaw(yaw);
+		//estimatorKalmanGetEstimatedPos(pos);
+		//DEBUG_PRINT("yaw: %f, x: %f, y: %f \n", yaw, pos->x, pos->y, pos->z);
 		//translate state information to bytes
 
 		//transmit state information over uart
@@ -332,7 +332,7 @@ static void mimsydeckInit()
 
 	//commanderInit();
     xTaskCreate(mimsydeckTask, "mimsy", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-    //xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+    xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     isInit = true;
 }
 
