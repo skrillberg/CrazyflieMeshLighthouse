@@ -29,16 +29,18 @@ static void mimsyStateTask(void *param){
 	//set period for mimsy update
 	TickType_t rate_hz = 10;
 	TickType_t period_ticks = configTICK_RATE_HZ/rate_hz;
-	float* yaw;
-	point_t* pos;
+	float yaw;
+	point_t pos;
+	while(estimatorKalmanTest());
+
 	while(1){
 		//delay for period of time
 		vTaskDelayUntil(&xLastWakeTime, period_ticks);
 		uart1Putchar(uchar);
 		//get state information from estimator
-		//estimatorKalmanGetEstimatedYaw(yaw);
-		//estimatorKalmanGetEstimatedPos(pos);
-		//DEBUG_PRINT("yaw: %f, x: %f, y: %f \n", yaw, pos->x, pos->y, pos->z);
+		estimatorKalmanGetEstimatedYaw(&yaw);
+		estimatorKalmanGetEstimatedPos(&pos);
+		DEBUG_PRINT("yaw: %f, x: %f, y: %f \n", yaw, pos.x, pos.y, pos.z);
 		//translate state information to bytes
 
 		//transmit state information over uart

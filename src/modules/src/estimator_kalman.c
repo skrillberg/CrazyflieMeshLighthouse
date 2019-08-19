@@ -470,7 +470,8 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
    * This is done every round, since the external state includes some sensor data
    */
   kalmanCoreExternalizeState(&coreData, state, sensors, osTick);
-  external_state = *state;
+  //external_state = *state;
+  memcpy(&external_state,state,sizeof(*state));
 }
 
 
@@ -622,7 +623,7 @@ void estimatorKalmanGetEstimatedPos(point_t* pos) {
 }
 
 void estimatorKalmanGetEstimatedYaw(float* yaw ){
-
+	//DEBUG_PRINT("yaw: %f \n", external_state.attitude.yaw);
 	*yaw = external_state.attitude.yaw;
 
 }
