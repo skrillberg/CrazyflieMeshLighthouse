@@ -17,6 +17,7 @@
 #include "estimator.h"
 //#include "openserial.h"
 #include "estimator_kalman.h"
+#include "estimator.h"
 
 static void handleLighthousePacket(uint8_t * packet);
 
@@ -27,23 +28,59 @@ static void mimsyStateTask(void *param){
 	xLastWakeTime = xTaskGetTickCount();
 	char uchar = 'a';
 	//set period for mimsy update
-	TickType_t rate_hz = 10;
+	TickType_t rate_hz = 1;
 	TickType_t period_ticks = configTICK_RATE_HZ/rate_hz;
 	float yaw;
 	point_t pos;
+	union{
+		int16_t val;
+		uint8_t bytes[2];
+	}x;
+	union{
+		int16_t val;
+		uint8_t bytes[2];
+	}y;
+	union{
+		int32_t val;
+		uint8_t bytes[4];
+	}phi;
+	uint8_t state_packet[10];
+
 	while(estimatorKalmanTest());
 
 	while(1){
 		//delay for period of time
 		vTaskDelayUntil(&xLastWakeTime, period_ticks);
-		uart1Putchar(uchar);
+		//uart1Putchar(uchar);
+
 		//get state information from estimator
 		estimatorKalmanGetEstimatedYaw(&yaw);
 		estimatorKalmanGetEstimatedPos(&pos);
-		DEBUG_PRINT("yaw: %f, x: %f, y: %f \n", yaw, pos.x, pos.y, pos.z);
-		//translate state information to bytes
+		//DEBUG_PRINT("yaw: %f, x: %f, y: %f, z: %f \n", yaw, pos.x, pos.y, pos.z);
 
-		//transmit state information over uart
+		//translate state information to bytes
+		x.val = (int16_t) (pos.x * 100); //x in centimeters now
+		y.val = (int16_t) (pos.y * 100); // y converted to cm
+		phi.val = (int32_t) (yaw *3.14159/180 * 1000); //phi converted to milliradians
+		//DEBUG_PRINT("yaw: %d, x: %d, y: %d \n", phi.val, x.val, y.val);
+
+		//construct uart packet
+		state_packet[0] = 's';
+		state_packet[1] = x.bytes[0];
+		state_packet[2] = x. bytes[1];
+
+		state_packet[3] = y.bytes[0];
+		state_packet[4] = y.bytes[1];
+		state_packet[5] = phi.bytes[0];
+		state_packet[6] = phi.bytes[1];
+		state_packet[7] = phi.bytes[2];
+		state_packet[8] = phi.bytes[3];
+		state_packet[9] = 'z';
+
+		//send uart packet
+		for(int i=0; i<10; i++){
+			uart1Putchar(state_packet[i]);
+		}
 	}
 }
 
