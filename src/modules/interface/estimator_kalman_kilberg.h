@@ -73,7 +73,7 @@ bool estimatorKalmanEnqueueAbsoluteHeight(const heightMeasurement_t *height);
 bool estimatorKalmanEnqueueFlow(const flowMeasurement_t *flow);
 bool estimatorKalmanEnqueueMimsyLighthouse(const mlhMeasurement_t *mlh);
 bool estimatorKalmanEnqueueMag(const magMeasurement_t *mag);
-bool estimatorKalmanEnqueuePose(const poseMeasurement_t *pose);
+
 void estimatorKalmanGetEstimatedPos(point_t* pos);
 void estimatorKalmanGetEstimatedYaw(float* yaw );
 

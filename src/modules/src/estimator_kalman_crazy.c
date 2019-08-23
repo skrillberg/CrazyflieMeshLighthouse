@@ -100,7 +100,7 @@ static inline bool stateEstimatorHasMimsyLighthouseMeasurement(mlhMeasurement_t 
 static xQueueHandle magDataQueue;
 #define MAG_QUEUE_LENGTH (10)
 
-static inline bool stateEstimatorHasMagMeasurment(magMeasurement_t *mag){
+static inline bool stateEstimatorHasMagMeasurement(magMeasurement_t *mag){
 	return (pdTRUE == xQueueReceive(magDataQueue, mag, 0));
 }
 
@@ -118,14 +118,6 @@ static xQueueHandle posDataQueue;
 
 static inline bool stateEstimatorHasPositionMeasurement(positionMeasurement_t *pos) {
   return (pdTRUE == xQueueReceive(posDataQueue, pos, 0));
-}
-
-// Direct measurements of Crazyflie pose
-static xQueueHandle poseDataQueue;
-#define POSE_QUEUE_LENGTH (10)
-
-static inline bool stateEstimatorHasPoseMeasurement(poseMeasurement_t *pose) {
-  return (pdTRUE == xQueueReceive(poseDataQueue, pose, 0));
 }
 
 // Measurements of a UWB Tx/Rx
@@ -353,9 +345,9 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  magAccumulatorCount++;
   }
 
-  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/1// update at
-        && magAccumulatorCount > 0){
+  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/1 && magAccumulatorCount < 0){
 	  //mag accumulator update
+
 	  magAccumulator.x /= magAccumulatorCount;
 	  magAccumulator.y /= magAccumulatorCount;
 	  magAccumulator.z /= magAccumulatorCount;
@@ -366,7 +358,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  mag.y = magAccumulator.y;
 	  mag.z = magAccumulator.z;
 
-	  kalmanCoreUpdateWithMag(&coreData, &mag);
+	  //kalmanCoreUpdateWithMag(&coreData, &mag);
 		//added by kilberg
 	  magAccumulator = (Axis3f){.axis={0}};
 	  magAccumulatorCount = 0;
@@ -404,9 +396,9 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
    * we therefore consume all measurements since the last loop, rather than accumulating
    */
   mlhMeasurement_t mlh;
-  while(stateEstimatorHasMimsyLighthouseMeasurement(&mlh)){
+  while(0 && stateEstimatorHasMimsyLighthouseMeasurement(&mlh)){
 	  DEBUG_PRINT("\n");
-	  DEBUG_PRINT("MLH Packet, x, y, phi, t: %f, %f, %f, %f \n",(double)mlh.x,(double) mlh.y,(double) mlh.heading,(double) mlh.measTime);
+	  DEBUG_PRINT("MLH Packet, x, y, phi, t: %f, %f, %f, %f \n",mlh.x, mlh.y, mlh.heading, mlh.measTime);
 	  //mlh.x = 1.0f;
 	  //mlh.y = 1.0f;
 	  //mlh.heading = 0.8f;
@@ -478,7 +470,8 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
    * This is done every round, since the external state includes some sensor data
    */
   kalmanCoreExternalizeState(&coreData, state, sensors, osTick);
-  external_state = *state;
+  //external_state = *state;
+  //memcpy(&external_state,state,sizeof(*state));
 }
 
 
@@ -506,7 +499,7 @@ void estimatorKalmanInit(void) {
     flowDataQueue = xQueueCreate(FLOW_QUEUE_LENGTH, sizeof(flowMeasurement_t));
     tofDataQueue = xQueueCreate(TOF_QUEUE_LENGTH, sizeof(tofMeasurement_t));
     heightDataQueue = xQueueCreate(HEIGHT_QUEUE_LENGTH, sizeof(heightMeasurement_t));
-    poseDataQueue = xQueueCreate(POSE_QUEUE_LENGTH, sizeof(poseMeasurement_t));
+
     //added by BK for mimsy lighthouse measurements
     magDataQueue = xQueueCreate(MAG_QUEUE_LENGTH, sizeof(magMeasurement_t));
     mlhDataQueue = xQueueCreate(MLH_QUEUE_LENGTH,  sizeof(mlhMeasurement_t));
@@ -516,7 +509,6 @@ void estimatorKalmanInit(void) {
   {
     xQueueReset(distDataQueue);
     xQueueReset(posDataQueue);
-    xQueueReset(poseDataQueue);
     xQueueReset(tdoaDataQueue);
     xQueueReset(flowDataQueue);
     xQueueReset(tofDataQueue);
@@ -569,7 +561,7 @@ static bool stateEstimatorEnqueueExternalMeasurement(xQueueHandle queue, void *m
 // added by kilberg for cooperative mimsy lighthouse measurements
 bool estimatorKalmanEnqueueMimsyLighthouse(const mlhMeasurement_t *mlh){
 	ASSERT(isInit);
-	DEBUG_PRINT("In estimatorKalmanEnqueueMlh mlh.x: %f, mlh.y %f, mlh.heading: %f, mlh.measTime: %f\n",(double) mlh->x,(double) mlh->y,(double) mlh->heading, (double)mlh->measTime);
+	DEBUG_PRINT("In estimatorKalmanEnqueueMlh mlh.x: %f, mlh.y %f, mlh.heading: %f, mlh.measTime: %f\n", mlh->x, mlh->y, mlh->heading, mlh->measTime);
 	return stateEstimatorEnqueueExternalMeasurement(mlhDataQueue, (void *)mlh);
 }
 
@@ -590,11 +582,7 @@ bool estimatorKalmanEnqueuePosition(const positionMeasurement_t *pos)
   ASSERT(isInit);
   return stateEstimatorEnqueueExternalMeasurement(posDataQueue, (void *)pos);
 }
-bool estimatorKalmanEnqueuePose(const poseMeasurement_t *pose)
-{
-  ASSERT(isInit);
-  return stateEstimatorEnqueueExternalMeasurement(poseDataQueue, (void *)pose);
-}
+
 bool estimatorKalmanEnqueueDistance(const distanceMeasurement_t *dist)
 {
   ASSERT(isInit);
@@ -635,7 +623,7 @@ void estimatorKalmanGetEstimatedPos(point_t* pos) {
 }
 
 void estimatorKalmanGetEstimatedYaw(float* yaw ){
-
+	//DEBUG_PRINT("yaw: %f \n", external_state.attitude.yaw);
 	*yaw = external_state.attitude.yaw;
 
 }

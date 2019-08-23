@@ -19,7 +19,6 @@ typedef struct {
   bool (*estimatorEnqueueTDOA)(const tdoaMeasurement_t *uwb);
   bool (*estimatorEnqueuePosition)(const positionMeasurement_t *pos);
   bool (*estimatorEnqueueDistance)(const distanceMeasurement_t *dist);
-  bool (*estimatorEnqueuePose)(const poseMeasurement_t *pose);
   bool (*estimatorEnqueueTOF)(const tofMeasurement_t *tof);
   bool (*estimatorEnqueueAbsoluteHeight)(const heightMeasurement_t *height);
   bool (*estimatorEnqueueFlow)(const flowMeasurement_t *flow);
@@ -41,7 +40,6 @@ static EstimatorFcns estimatorFunctions[] = {
     .estimatorEnqueueTOF = NOT_IMPLEMENTED,
     .estimatorEnqueueAbsoluteHeight = NOT_IMPLEMENTED,
     .estimatorEnqueueFlow = NOT_IMPLEMENTED,
-.estimatorEnqueuePose = NOT_IMPLEMENTED,
 	.estimatorEnqueueMimsyLighthouse = NOT_IMPLEMENTED,
 	.estimatorEnqueueMag = NOT_IMPLEMENTED,
 
@@ -59,7 +57,6 @@ static EstimatorFcns estimatorFunctions[] = {
     .estimatorEnqueueFlow = NOT_IMPLEMENTED,
 	.estimatorEnqueueMimsyLighthouse = NOT_IMPLEMENTED,
 	.estimatorEnqueueMag = NOT_IMPLEMENTED,
-.estimatorEnqueuePose = NOT_IMPLEMENTED,
   },
   {
     .init = estimatorKalmanInit,
@@ -74,7 +71,6 @@ static EstimatorFcns estimatorFunctions[] = {
     .estimatorEnqueueFlow = estimatorKalmanEnqueueFlow,
 	.estimatorEnqueueMimsyLighthouse = estimatorKalmanEnqueueMimsyLighthouse,
 	.estimatorEnqueueMag = estimatorKalmanEnqueueMag,
-	.estimatorEnqueuePose = estimatorKalmanEnqueuePose,
     },
 };
 
@@ -146,13 +142,6 @@ bool estimatorEnqueuePosition(const positionMeasurement_t *pos) {
   return false;
 }
 
-bool estimatorEnqueuePose(const poseMeasurement_t *pose) {
-  if (estimatorFunctions[currentEstimator].estimatorEnqueuePose) {
-    return estimatorFunctions[currentEstimator].estimatorEnqueuePose(pose);
-  }
-
-  return false;
-}
 bool estimatorEnqueueDistance(const distanceMeasurement_t *dist) {
   if (estimatorFunctions[currentEstimator].estimatorEnqueueDistance) {
     return estimatorFunctions[currentEstimator].estimatorEnqueueDistance(dist);

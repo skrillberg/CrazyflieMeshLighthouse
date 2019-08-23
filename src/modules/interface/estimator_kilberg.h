@@ -48,7 +48,5 @@ bool estimatorEnqueueDistance(const distanceMeasurement_t *dist);
 bool estimatorEnqueueTOF(const tofMeasurement_t *tof);
 bool estimatorEnqueueAbsoluteHeight(const heightMeasurement_t *height);
 bool estimatorEnqueueFlow(const flowMeasurement_t *flow);
-bool estimatorEnqueuePose(const poseMeasurement_t *pose);
-bool estimatorEnqueueMimsyLighthouse(const mlhMeasurement_t *mlh);
 
 #endif //__ESTIMATOR_H__

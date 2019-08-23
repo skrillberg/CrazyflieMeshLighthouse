@@ -16,7 +16,7 @@
 # DEBUG_PRINT_ON_SEGGER_RTT = 1
 
 ## Load a deck driver that has no OW memory
-# CFLAGS += -DDECK_FORCE=bcBuzzer
+CFLAGS += -DDECK_FORCE=myMimsydeck
 
 ## Load multiple deck drivers that has no OW memory
 # CFLAGS += -DDECK_FORCE=bcBuzzer:bcLedRing

@@ -309,15 +309,15 @@ void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
 	float r = sqrtf(powf(mlh->x - this->S[KC_STATE_X],2) + powf(mlh->y - this->S[KC_STATE_Y],2));
 
 	//avoid divide by zero
-	if(r == 0.0f){
+	if(r == 0.0){
 		return;
 	}
 
     float h[KC_STATE_DIM] = {0};
     //h[KC_STATE_X] = -sin(angle)/r; //dh/dx
    // h[KC_STATE_Y] = cos(angle)/r; //dh/dy
-    h[KC_STATE_X] = sinf(angle)/r; //dh/dx
-    h[KC_STATE_Y] = -cosf(angle)/r; //dh/dy
+    h[KC_STATE_X] = sin(angle)/r; //dh/dx
+    h[KC_STATE_Y] = -cos(angle)/r; //dh/dy
     float phi_p = atan2f(mlh->y - this->S[KC_STATE_Y],mlh->x - this->S[KC_STATE_X]);
     /*
     DEBUG_PRINT("z: %f, zp: %f, r: %f, Hx: %f, Hy: %f\n",angle,phi_p, r, h[KC_STATE_X], h[KC_STATE_Y]);
@@ -330,7 +330,7 @@ void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
     float tan_top = sinf(angle)*cosf(phi_p) - cosf(angle)*sinf(phi_p);
     float tan_bot = cosf(angle)*cosf(phi_p) + sinf(angle)*sinf(phi_p);
     float wrap_error = atan2f(tan_top,tan_bot);
-    DEBUG_PRINT("Raw Diff: %f, Wrapped Diff: %f \n",(double)(angle - phi_p), (double)wrap_error);
+    DEBUG_PRINT("Raw Diff: %f, Wrapped Diff: %f \n",angle - phi_p, wrap_error);
     scalarUpdate(this, &H,wrap_error, 0.05f);
     //if(angle - phi_p < 3.14159f){
     //	scalarUpdate(this, &H,angle - phi_p, 0.05f);
@@ -392,11 +392,11 @@ void updateHeading(kalmanCoreData_t* this,float yaw_error){
 	  float denom = 4*qw;
 
 	  float qx = 1 / denom * (this->R[1][2] -this->R[2][1]);
-	  float qy = 1 / denom * (this->R[2][0] -this->R[0][2]);
-	  float qz = 1 / denom * (this->R[1][2] -this->R[2][1]);
-	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", (double)this->q[0], (double)this->q[1],(double)this->q[2],(double)this->q[3] );
-	  DEBUG_PRINT("yaw error: %f\n",(double)yaw_error);
-	  DEBUG_PRINT("NEW QUATS: %f, %f, %f ,%f \n", (double)qw,(double)qx,(double)qy,(double)qz);
+	  float qy = 1 / denom * (this->R[3][0] -this->R[0][3]);
+	  float qz = 1 / denom * (this->R[2][3] -this->R[3][2]);
+	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", this->q[0], this->q[1],this->q[2],this->q[3] );
+	  DEBUG_PRINT("yaw error: %f\n",yaw_error);
+	  DEBUG_PRINT("NEW QUATS: %f, %f, %f ,%f \n", qw,qx,qy,qz);
 
 
 	  // compute the quaternion values in [w,x,y,z] order
@@ -414,9 +414,9 @@ void updateHeading(kalmanCoreData_t* this,float yaw_error){
 	  this->q[1] = quat[1];
 	  this->q[2] = quat[2];
 	  this->q[3] = quat[3];
-	  DEBUG_PRINT("error quats w,x,y,z: %f, %f, %f, %f \n", (double)quat[0],(double) quat[1],(double) quat[2],(double) quat[3]);
+	  DEBUG_PRINT("error quats w,x,y,z: %f, %f, %f, %f \n", quat[0], quat[1], quat[2], quat[3]);
 	  DEBUG_PRINT("Heading Updated\n");
-	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", (double)this->q[0],(double) this->q[1],(double)this->q[2],(double)this->q[3] );
+	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", this->q[0], this->q[1],this->q[2],this->q[3] );
 
 }
 /*this update will derotate the magnetometer vector using pitch and roll
@@ -446,8 +446,8 @@ void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
     float heading;
 	//convert to eulers
 	  float yaw = atan2f(2*(this->q[1]*this->q[2]+this->q[0]*this->q[3]) , this->q[0]*this->q[0] + this->q[1]*this->q[1] - this->q[2]*this->q[2] - this->q[3]*this->q[3]);
-	  //float pitch = asinf(-2*(this->q[1]*this->q[3] - this->q[0]*this->q[2]));
-	  //float roll = atan2f(2*(this->q[2]*this->q[3]+this->q[0]*this->q[1]) , this->q[0]*this->q[0] - this->q[1]*this->q[1] - this->q[2]*this->q[2] + this->q[3]*this->q[3]);
+	  float pitch = asinf(-2*(this->q[1]*this->q[3] - this->q[0]*this->q[2]));
+	  float roll = atan2f(2*(this->q[2]*this->q[3]+this->q[0]*this->q[1]) , this->q[0]*this->q[0] - this->q[1]*this->q[1] - this->q[2]*this->q[2] + this->q[3]*this->q[3]);
 
 	  mag ->x = xscale * (mag->x - xbias);
 	  mag -> y = yscale * (mag->y - ybias);
@@ -611,12 +611,12 @@ void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
 	  }*/
 	  heading_updated = true;
 
-	    //float h[KC_STATE_DIM] = {0};
-	    //h[KC_STATE_D0] = this->R[0][2];
-	    //h[KC_STATE_D1] = this->R[1][2];
-	    //h[KC_STATE_D2] = this->R[2][2];
-	   // float error = -sinf(yaw_error)/(1+cosf(yaw_error));
-	    //arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+	    float h[KC_STATE_DIM] = {0};
+	    h[KC_STATE_D0] = this->R[0][2];
+	    h[KC_STATE_D1] = this->R[1][2];
+	    h[KC_STATE_D2] = this->R[2][2];
+	    float error = -sinf(yaw_error)/(1+cosf(yaw_error));
+	    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
 	    //scalarUpdate(this, &H, 0.0f-heading, 0.05f);
 	    //scalarUpdate(this, &H, yaw_error, 0.05f);
 	    	/*

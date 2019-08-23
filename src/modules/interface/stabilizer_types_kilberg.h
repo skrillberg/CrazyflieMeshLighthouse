@@ -89,6 +89,35 @@ typedef struct baro_s {
   float asl;                // m (ASL = altitude above sea level)
 } baro_t;
 
+//mimsy lighthouse cooperative lighthouse measurement type
+typedef struct mlhMeasurement_s {
+	union {
+		struct {
+			float x; //x location of lighthouse
+			float y; //y location of lighthouse
+			float z; //z location of lighthouse
+		};
+		float lhpos[3];
+	};
+	float heading; //relative heading of robot from lighthouse perspective
+	float measTime;	// time of measurement with respect to openwsn time
+	float currTime; // curent time in openwsn ASN time
+	float stdDev;
+} mlhMeasurement_t;
+
+//magnetometer
+
+typedef struct magMeasurement_s{
+	union {
+		struct {
+			float x; // x component of mag field
+			float y; // y component of mag field
+			float z; // z component of mag field
+		};
+		float vec[3];
+	};
+} magMeasurement_t;
+
 typedef struct positionMeasurement_s {
   union {
     struct {
@@ -100,20 +129,6 @@ typedef struct positionMeasurement_s {
   };
   float stdDev;
 } positionMeasurement_t;
-
-typedef struct poseMeasurement_s {
-  union {
-    struct {
-      float x;
-      float y;
-      float z;
-    };
-    float pos[3];
-  };
-  quaternion_t quat;
-  float stdDevPos;
-  float stdDevQuat;
-} poseMeasurement_t;
 
 typedef struct distanceMeasurement_s {
   union {
@@ -233,37 +248,6 @@ typedef struct heightMeasurement_s {
   float height;
   float stdDev;
 } heightMeasurement_t;
-
-//mimsy lighthouse cooperative lighthouse measurement type
-typedef struct mlhMeasurement_s {
-	union {
-		struct {
-			float x; //x location of lighthouse
-			float y; //y location of lighthouse
-			float z; //z location of lighthouse
-		};
-		float lhpos[3];
-	};
-	float heading; //relative heading of robot from lighthouse perspective
-	float measTime;	// time of measurement with respect to openwsn time
-	float currTime; // curent time in openwsn ASN time
-	float stdDev;
-} mlhMeasurement_t;
-
-//magnetometer
-
-typedef struct magMeasurement_s{
-	union {
-		struct {
-			float x; // x component of mag field
-			float y; // y component of mag field
-			float z; // z component of mag field
-		};
-		float vec[3];
-	};
-} magMeasurement_t;
-
-
 
 // Frequencies to bo used with the RATE_DO_EXECUTE_HZ macro. Do NOT use an arbitrary number.
 #define RATE_1000_HZ 1000
