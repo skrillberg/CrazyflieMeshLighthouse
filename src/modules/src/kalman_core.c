@@ -64,7 +64,7 @@
 #include "log.h"
 #include "param.h"
 #include "debug.h"
-
+#include "motors.h"
 // #define DEBUG_STATE_CHECK
 
 // the reversion of pitch and roll to zero
@@ -449,9 +449,41 @@ void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
 	  //float pitch = asinf(-2*(this->q[1]*this->q[3] - this->q[0]*this->q[2]));
 	  //float roll = atan2f(2*(this->q[2]*this->q[3]+this->q[0]*this->q[1]) , this->q[0]*this->q[0] - this->q[1]*this->q[1] - this->q[2]*this->q[2] + this->q[3]*this->q[3]);
 
+	  //correct for pwm interference*******************************
+
+	  //W model found emperically
+	  float w[4][3] = {
+			  {7.536e-8f, 4.896e-7f, 4.651e-7},
+			  {2.906e-8f, 2.791e-7f, 1.964e-7f},
+			  {2.032e-7f, 3.011e-7f, 3.539e-7f},
+			  {1.042e-7f, 3.585e-8f, 3e-7f}
+	  };
+	  arm_matrix_instance_f32 W= {4, 3, (float *) w}; //create matrix object
+
+	  //obtain current pwm settings (X)
+	  float x[4];
+
+	  for(int i=0; i<4; i++){
+		  x[i] = (float) motorsGetRatio(i);
+	  }
+	  arm_matrix_instance_f32 X= {1,4 , x}; //create matrix object
+
+	  //apply model to pwm settings to predict disturbance (Y)
+	  float y[3];
+	  arm_matrix_instance_f32 Y= {1, 3, y}; //create matrix object
+
+	  //Y = X*W
+	  mat_mult(&X,&W,&Y);
+
+	  //print model
+	  DEBUG_PRINT("Mag Disturbance: X: %f, Y: %f, Z: %f \n",(double)y[0],(double)y[1],(double)y[2]);
+
+
 	  mag ->x = xscale * (mag->x - xbias);
 	  mag -> y = yscale * (mag->y - ybias);
 	  mag -> z = zscale * (mag->z - zbias);
+
+
 
 /*
 	  //rotate mag vector to coordinate plane that is parallel to earths (tilt compensation)
