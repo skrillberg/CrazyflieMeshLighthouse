@@ -118,7 +118,7 @@ void updateMimsy(void){
 		x.val = (int16_t) (pos.x * 100); //x in centimeters now
 		y.val = (int16_t) (pos.y * 100); // y converted to cm
 		phi.val = (int32_t) (yaw *3.14159f/180.0f * 1000.0f); //phi converted to milliradians
-		//DEBUG_PRINT("yaw: %ld, x: %d, y: %d \n", phi.val, x.val, y.val);
+		DEBUG_PRINT("yaw: %ld, x: %d, y: %d \n", phi.val, x.val, y.val);
 
 		//construct uart packet
 		state_packet[0] = 's';
@@ -255,10 +255,10 @@ static void handleLighthousePacket(uint8_t * packet){
 	//DEBUG_PRINT("float_test: %f, bytes[0->4]: %x, %x, %x, %x\n",float_test.val, float_test.bytes[0], float_test.bytes[1], float_test.bytes[2], float_test.bytes[3]);
 
 	//union for converting bytes to float, only works if float encoding is the same for crazyflie and mimsy
-	union{
+	/*union{
 		float val;
 		uint8_t bytes[4];
-	} phi;
+	} phi;*/
 
 	//unions for converting bytes to ints, only works if endianess is same for crazyflie and mimsy
 	union {
@@ -271,10 +271,15 @@ static void handleLighthousePacket(uint8_t * packet){
 		uint8_t bytes[2];
 	} y;
 
+	union {
+		int32_t val;
+		uint8_t bytes[4];
+	} phi_int;
+
 	float pos_scale = 0.001f; //position scale factor of x, y representation
 	//int16_t x =0; //x location of lighthouse in mimsy units
 	//int16_t  y=0; //y location of lighthouse in mimsy units
-	float heading_scale = 1.0f; //scale factor of phi representation
+	//float heading_scale = 1.0f; //scale factor of phi representation
 	//int32_t phi= 0; //heading measurement in mimsy uints
 	uint32_t t=0; //timestamp in ASN time
 
@@ -290,8 +295,10 @@ static void handleLighthousePacket(uint8_t * packet){
 	/*transfer float from packet into unions. Floats are little endian
 	 * but serial sends them as big endian at the moment*/
 	for(int idx = 0; idx < 4; idx++){
-		phi.bytes[idx] = packet[5+(3-idx)]; //starts packet[8], ends packet[5]
+		//phi.bytes[idx] = packet[5+(3-idx)]; //starts packet[8], ends packet[5]
+		phi_int.bytes[idx] = packet[5+(3-idx)];
 	}
+
 
 	//convert from 4xbytes to uint32_t
 	t = 16777216*packet[9] + 65536*packet[10] + 256*packet[11] + packet[12];
@@ -301,7 +308,7 @@ static void handleLighthousePacket(uint8_t * packet){
 	//TODO: need x and y scale in packet as well to avoid errors and hardcoding
 	mlh.x = (float) (x.val * pos_scale);
 	mlh.y = (float) (y.val * pos_scale) ;
-	mlh.heading = (float) (phi.val * heading_scale);
+	mlh.heading = (float) (phi_int.val) * 0.001f;
 	mlh.measTime = (float) t;
 
 
