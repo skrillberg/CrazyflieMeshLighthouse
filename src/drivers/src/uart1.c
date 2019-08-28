@@ -45,7 +45,7 @@
 /** This uart is conflicting with SPI2 DMA used in sensors_bmi088_spi_bmp388.c
  *  which is used in CF-RZR. So for other products this can be enabled.
  */
-//#define ENABLE_UART1_DMA
+#define ENABLE_UART1_DMA
 
 static xQueueHandle uart1queue;
 

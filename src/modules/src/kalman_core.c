@@ -344,6 +344,7 @@ void rotateVector(vector_t * vec, float R[3][3],vector_t * dstVec){
   dstVec -> x = R[0][0] * vec -> x + R[0][1] * vec -> y+ R[0][2]  * vec -> z;
   dstVec -> y = R[1][0] * vec -> x + R[1][1] * vec -> y + R[1][2] * vec -> z;
   dstVec -> z = R[2][0] * vec -> x + R[2][1] * vec -> y + R[2][2] * vec -> z;
+
 }
 
 float quatRotate(float * q1, float * q2, float * dstq,bool normalize){
@@ -419,6 +420,69 @@ void updateHeading(kalmanCoreData_t* this,float yaw_error){
 	  DEBUG_PRINT("w,x,y,z: %f, %f, %f, %f \n", (double)this->q[0],(double) this->q[1],(double)this->q[2],(double)this->q[3] );
 
 }
+
+void getHeading(magMeasurement_t* mag,float * heading){
+	  float xbias;
+	  float ybias;
+	  float zbias;
+	  float xscale;
+	  float yscale;
+	  float zscale;
+
+
+	  //correct for pwm interference*******************************
+
+	  //W model found emperically
+	  float w[4][3] = {
+			  {7.536e-8f, 4.896e-7f, 4.651e-7},
+			  {2.906e-8f, 2.791e-7f, 1.964e-7f},
+			  {2.032e-7f, 3.011e-7f, 3.539e-7f},
+			  {1.042e-7f, 3.585e-8f, 3e-7f}
+	  };
+	  arm_matrix_instance_f32 W= {4, 3, (float *) w}; //create matrix object
+
+	  //obtain current pwm settings (X)
+	  float x[4];
+
+	  for(int i=0; i<4; i++){
+		  x[i] = (float) motorsGetRatio(i);
+	  }
+	  arm_matrix_instance_f32 X= {1,4 , x}; //create matrix object
+
+	  //apply model to pwm settings to predict disturbance (Y)
+	  float y[3]={0};
+	  arm_matrix_instance_f32 Y= {1, 3, y}; //create matrix object
+
+	  //Y = X*W
+	  mat_mult(&X,&W,&Y);
+
+	  //print model
+	 // DEBUG_PRINT("PWMS: %f, %f, %f, %f\n",(double)x[0],(double)x[1],(double)x[2],(double)x[3]);
+	  //DEBUG_PRINT("Mag Disturbance: X: %f, Y: %f, Z: %f \n",(double)y[0],(double)y[1],(double)y[2]);
+
+	  //float corrected_mag[3];
+
+	 // corrected_mag[0] = mag->x - y[0];
+	  //corrected_mag[1] = mag->y - y[1];
+	 // corrected_mag[2] = mag->z - y[2];
+
+	  //DEBUG_PRINT("Corrected: X: %f, Y: %f, Z: %f \n",(double)corrected_mag[0],(double)corrected_mag[1],(double)corrected_mag[2]);
+	  //DEBUG_PRINT("Raw: X: %f, Y: %f, Z: %f \n",(double)mag->x,(double)mag->y,(double)mag->z);
+	  //DEBUG_PRINT("\n");
+	  //for second crazyflie
+	  xbias = 0.42;
+	  ybias = -1.7789;
+	  zbias = -3.8691;
+	  xscale = 0.9764;
+	  yscale = 1.0719;
+	  zscale = 0.9589;
+	  mag ->x = xscale * (mag->x - xbias - y[0]);
+	  mag -> y = -yscale * (mag->y - ybias -y[1]);
+	  mag -> z = -zscale * (mag->z - zbias -y[2]);
+
+	  *heading = atan2f(mag->y,mag->x);
+}
+
 /*this update will derotate the magnetometer vector using pitch and roll
 and then uses the atan of the x and y components to generate yaw. The
 mag measurement is decoupled from pitch and roll in order to avoid mag disturbances
@@ -469,19 +533,35 @@ void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
 	  arm_matrix_instance_f32 X= {1,4 , x}; //create matrix object
 
 	  //apply model to pwm settings to predict disturbance (Y)
-	  float y[3];
+	  float y[3]={0};
 	  arm_matrix_instance_f32 Y= {1, 3, y}; //create matrix object
 
 	  //Y = X*W
 	  mat_mult(&X,&W,&Y);
 
 	  //print model
-	  DEBUG_PRINT("Mag Disturbance: X: %f, Y: %f, Z: %f \n",(double)y[0],(double)y[1],(double)y[2]);
+	 // DEBUG_PRINT("PWMS: %f, %f, %f, %f\n",(double)x[0],(double)x[1],(double)x[2],(double)x[3]);
+	  //DEBUG_PRINT("Mag Disturbance: X: %f, Y: %f, Z: %f \n",(double)y[0],(double)y[1],(double)y[2]);
 
+	  //float corrected_mag[3];
 
-	  mag ->x = xscale * (mag->x - xbias);
-	  mag -> y = yscale * (mag->y - ybias);
-	  mag -> z = zscale * (mag->z - zbias);
+	 // corrected_mag[0] = mag->x - y[0];
+	  //corrected_mag[1] = mag->y - y[1];
+	 // corrected_mag[2] = mag->z - y[2];
+
+	  //DEBUG_PRINT("Corrected: X: %f, Y: %f, Z: %f \n",(double)corrected_mag[0],(double)corrected_mag[1],(double)corrected_mag[2]);
+	  //DEBUG_PRINT("Raw: X: %f, Y: %f, Z: %f \n",(double)mag->x,(double)mag->y,(double)mag->z);
+	  //DEBUG_PRINT("\n");
+	  //for second crazyflie
+	  xbias = 0.42;
+	  ybias = -1.7789;
+	  zbias = -3.8691;
+	  xscale = 0.9764;
+	  yscale = 1.0719;
+	  zscale = 0.9589;
+	  mag ->x = xscale * (mag->x - xbias - y[0]);
+	  mag -> y = yscale * (mag->y - ybias -y[1]);
+	  mag -> z = zscale * (mag->z - zbias -y[2]);
 
 
 
@@ -506,18 +586,20 @@ void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
 	  derotatedMag.y = Rd[1][0] * mag -> x + Rd[1][1] * mag -> y + Rd[1][2] * mag -> z;
 	  derotatedMag.z = Rd[2][0] * mag -> x + Rd[2][1] * mag -> y + Rd[2][2] * mag->z;
 */
-	  //rotate mag to earth frame
+	  //rotate mag to body frame
 	  magVec.x = mag->x;
-	  magVec.y = mag->y;
-	  magVec.z = mag->z;
+	  magVec.y = -mag->y;
+	  magVec.z = -mag->z;
+
+	  //rotate mag to earth frame
 	  rotateVector(&magVec, this->R,&earthMag);
 
 	  //calculate z rotation error based on z component only
 	  heading = atan2f(earthMag.y,earthMag.x);
-
+	  //heading = atan2f(magVec.y,magVec.x);
 	  //heading = atan2f(mag->y,mag->x);
-	  //DEBUG_PRINT("original, compensated: %f, %f; %f, %f \n", mag->x, mag->y, earthMag.x, earthMag.y);
-	 //DEBUG_PRINT("original, compensated: %f, %f \n", atan2f(mag->y,mag-> x) , heading);
+	// DEBUG_PRINT("original, compensated: %f, %f; %f, %f \n", mag->x, mag->y, earthMag.x, earthMag.y);
+	 //DEBUG_PRINT("original, compensated: %f, %f \n", (double)atan2f(mag->y,mag-> x) , (double)heading);
 	  //float yaw_error = fmod(heading - (yaw) + 3.1415927f,2.0f*3.1415927f)-3.1415927f; //calc yaw error from reference yaw
 	 // DEBUG_PRINT("Est, Compass,: %f, %f, %f \n", yaw, heading,yaw_error);
 
@@ -528,8 +610,8 @@ void kalmanCoreUpdateWithMag(kalmanCoreData_t* this, magMeasurement_t* mag){
 	    float yaw_error = atan2f(tan_top,tan_bot);
 
 	    //error is leftover nonzero heading
-	    yaw_error = 0.0f - heading;
-
+	    yaw_error = heading;
+	    //yaw_error = yaw - heading;
 	    if(!heading_updated ){
 	    	updateHeading(this,yaw_error);
 	    	yaw_error = 0;

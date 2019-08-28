@@ -104,7 +104,7 @@ void kalmanCoreInit(kalmanCoreData_t* this);
 //mimsy lighthouse
 void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh);
 
-
+void getHeading(magMeasurement_t* mag,float * yaw);
 //magnetometer
 void kalmanCoreUpdateWithMag(kalmanCoreData_t * this, magMeasurement_t* mag);
 

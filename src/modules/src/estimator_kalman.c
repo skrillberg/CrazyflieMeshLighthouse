@@ -73,6 +73,7 @@
 #include "debug.h"
 
 #include "cfassert.h"
+#include "mimsydeck.h"
 // #define KALMAN_USE_BARO_UPDATE
 //#define KALMAN_DECOUPLE_XY //decouple xy so filter doesn't explode
 
@@ -90,6 +91,7 @@
 //mimsy cooperative lighthouse measurements
 static xQueueHandle mlhDataQueue;
 static state_t external_state;
+static magMeasurement_t current_mag;
 #define MLH_QUEUE_LENGTH (10)
 
 static inline bool stateEstimatorHasMimsyLighthouseMeasurement(mlhMeasurement_t *mlh){
@@ -353,7 +355,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  magAccumulatorCount++;
   }
 
-  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/1// update at
+  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/25// update at
         && magAccumulatorCount > 0){
 	  //mag accumulator update
 	  magAccumulator.x /= magAccumulatorCount;
@@ -366,12 +368,17 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  mag.y = magAccumulator.y;
 	  mag.z = magAccumulator.z;
 
-	  kalmanCoreUpdateWithMag(&coreData, &mag);
+	  current_mag.x = mag.x;
+	  current_mag.y = mag.y;
+	  current_mag.z = mag.z;
+	  //kalmanCoreUpdateWithMag(&coreData, &mag);
+	   updateMimsy();
 		//added by kilberg
 	  magAccumulator = (Axis3f){.axis={0}};
 	  magAccumulatorCount = 0;
 	  lastMagUpdate =  osTick;
 	  doneUpdate= true;
+
   }
 
 
@@ -478,7 +485,8 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
    * This is done every round, since the external state includes some sensor data
    */
   kalmanCoreExternalizeState(&coreData, state, sensors, osTick);
-  external_state = *state;
+  //external_state = *state;
+  memcpy(&external_state,state,sizeof(*state));
 }
 
 
@@ -635,10 +643,12 @@ void estimatorKalmanGetEstimatedPos(point_t* pos) {
 }
 
 void estimatorKalmanGetEstimatedYaw(float* yaw ){
-
+	getHeading(&current_mag, yaw);
+	//convert to radians
 	*yaw = external_state.attitude.yaw;
-
+	//DEBUG_PRINT("yaw: %f\n", (double) *yaw);
 }
+
 
 // Temporary development groups
 LOG_GROUP_START(kalman_states)

@@ -15,7 +15,9 @@
 #include "system.h"
 #include "config.h"
 #include "estimator.h"
+//#include "openserial.h"
 #include "estimator_kalman.h"
+#include "estimator.h"
 
 static void handleLighthousePacket(uint8_t * packet);
 
@@ -24,24 +26,121 @@ static void mimsyStateTask(void *param){
 	//register current wake time for task
 	TickType_t xLastWakeTime;
 	xLastWakeTime = xTaskGetTickCount();
-	char uchar = 'a';
+
+	//vTaskDelayUntil(&xLastWakeTime, configTICK_RATE_HZ*2); //two second delay
 	//set period for mimsy update
-	TickType_t rate_hz = 10;
+	TickType_t rate_hz = 1;
 	TickType_t period_ticks = configTICK_RATE_HZ/rate_hz;
-	//float* yaw;
-	//point_t* pos;
+	float yaw;
+	point_t pos;
+	union{
+		int16_t val;
+		uint8_t bytes[2];
+	}x;
+	union{
+		int16_t val;
+		uint8_t bytes[2];
+	}y;
+	union{
+		int32_t val;
+		uint8_t bytes[4];
+	}phi;
+	uint8_t state_packet[10];
+
+	while(estimatorKalmanTest());
+
 	while(1){
 		//delay for period of time
 		vTaskDelayUntil(&xLastWakeTime, period_ticks);
-		uart1Putchar(uchar);
-		//get state information from estimator
-		//estimatorKalmanGetEstimatedYaw(yaw);
-		//estimatorKalmanGetEstimatedPos(pos);
-		//DEBUG_PRINT("yaw: %f, x: %f, y: %f \n", yaw);
-		//translate state information to bytes
+		//uart1Putchar(uchar);
 
-		//transmit state information over uart
+		//get state information from estimator
+		estimatorKalmanGetEstimatedYaw(&yaw);
+		estimatorKalmanGetEstimatedPos(&pos);
+		//DEBUG_PRINT("yaw: %f, x: %f, y: %f, z: %f \n", yaw, pos.x, pos.y, pos.z);
+
+		//translate state information to bytes
+		x.val = (int16_t) (pos.x * 100); //x in centimeters now
+		y.val = (int16_t) (pos.y * 100); // y converted to cm
+		phi.val = (int32_t) (yaw *3.14159f/180.0f * 1000.0f); //phi converted to milliradians
+		//DEBUG_PRINT("yaw: %ld, x: %d, y: %d \n", phi.val, x.val, y.val);
+
+		//construct uart packet
+		state_packet[0] = 's';
+		state_packet[1] = x.bytes[0];
+		state_packet[2] = x. bytes[1];
+
+		state_packet[3] = y.bytes[0];
+		state_packet[4] = y.bytes[1];
+		state_packet[5] = phi.bytes[0];
+		state_packet[6] = phi.bytes[1];
+		state_packet[7] = phi.bytes[2];
+		state_packet[8] = phi.bytes[3];
+		state_packet[9] = 'z';
+
+		//uart1SendDataDmaBlocking(10, state_packet);
+
+		//send uart packet
+
+		for(int i=0; i<10; i++){
+			uart1Putchar(state_packet[i]);
+		}
 	}
+}
+
+void updateMimsy(void){
+
+
+
+	float yaw;
+	point_t pos;
+	union{
+		int16_t val;
+		uint8_t bytes[2];
+	}x;
+	union{
+		int16_t val;
+		uint8_t bytes[2];
+	}y;
+	union{
+		int32_t val;
+		uint8_t bytes[4];
+	}phi;
+	uint8_t state_packet[10];
+
+
+		//get state information from estimator
+		estimatorKalmanGetEstimatedYaw(&yaw);
+		estimatorKalmanGetEstimatedPos(&pos);
+		//DEBUG_PRINT("yaw: %f, x: %f, y: %f, z: %f \n", yaw, pos.x, pos.y, pos.z);
+
+		//translate state information to bytes
+		x.val = (int16_t) (pos.x * 100); //x in centimeters now
+		y.val = (int16_t) (pos.y * 100); // y converted to cm
+		phi.val = (int32_t) (yaw *3.14159f/180.0f * 1000.0f); //phi converted to milliradians
+		//DEBUG_PRINT("yaw: %ld, x: %d, y: %d \n", phi.val, x.val, y.val);
+
+		//construct uart packet
+		state_packet[0] = 's';
+		state_packet[1] = x.bytes[0];
+		state_packet[2] = x. bytes[1];
+
+		state_packet[3] = y.bytes[0];
+		state_packet[4] = y.bytes[1];
+		state_packet[5] = phi.bytes[0];
+		state_packet[6] = phi.bytes[1];
+		state_packet[7] = phi.bytes[2];
+		state_packet[8] = phi.bytes[3];
+		state_packet[9] = 'z';
+
+		//uart1SendDataDmaBlocking(10, state_packet);
+
+		//send uart packet
+
+		for(int i=0; i<10; i++){
+			uart1Putchar(state_packet[i]);
+		}
+
 }
 
 static int parsePacketType(uint8_t preamble){
@@ -70,11 +169,11 @@ static bool processPacket(int type){
 	int i = 0;
 
 
-	//bool frameDone = false;
+
 	int magx;
 	int magy;
 	int magz;
-//	uint32_t t;
+
 
 
 	uint8_t packet_length;
@@ -104,7 +203,7 @@ static bool processPacket(int type){
 		uart1Getchar(&uchar);
 		//uart1Putchar(uchar);
 		packet[i] = (uint8_t) uchar;
-		DEBUG_PRINT("Subsequent Char: %i \n",packet[i]);
+		//DEBUG_PRINT("Subsequent Char: %i \n",packet[i]);
 
 	}
 
@@ -115,7 +214,7 @@ static bool processPacket(int type){
 		return false;
 	}else{
 		DEBUG_PRINT("End of Frame: %i \n",(int)uchar);
-		//frameDone = true;
+
 	}
 
 	//handle packet based on type
@@ -152,12 +251,7 @@ static void handleLighthousePacket(uint8_t * packet){
 
 	//test float to see represntation of float
 	//3.14 is 0xC3F54840, little endian
-	/*
-	union{
-		float val;
-		uint8_t bytes[4];
-	} float_test;*/
-	//float_test.val = 3.14;
+
 	//DEBUG_PRINT("float_test: %f, bytes[0->4]: %x, %x, %x, %x\n",float_test.val, float_test.bytes[0], float_test.bytes[1], float_test.bytes[2], float_test.bytes[3]);
 
 	//union for converting bytes to float, only works if float encoding is the same for crazyflie and mimsy
@@ -239,7 +333,7 @@ static void mimsydeckTask(void *param)
 	//uint8_t c = 'a';
 	//setpoint_t setpoint;
 	//setpoint.thrust = 0.1;
-	//bool receiving = false;
+
 	bool synchronized = false;
 
 	char pattern[8] = {'d','e','a','d','b','e','e','f'};

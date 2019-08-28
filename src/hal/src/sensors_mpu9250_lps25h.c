@@ -281,6 +281,7 @@ void processMagnetometerMeasurements(const uint8_t *buffer)
     int16_t headingy = (((int16_t) buffer[4]) << 8) | buffer[3];
     int16_t headingz = (((int16_t) buffer[6]) << 8) | buffer[5];
 
+    //modify so they are rotated correctly
     sensorData.mag.x = (float)headingx / MAG_GAUSS_PER_LSB;
     sensorData.mag.y = (float)headingy / MAG_GAUSS_PER_LSB;
     sensorData.mag.z = (float)headingz / MAG_GAUSS_PER_LSB;
