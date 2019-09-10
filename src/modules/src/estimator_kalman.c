@@ -76,7 +76,7 @@
 #include "mimsydeck.h"
 // #define KALMAN_USE_BARO_UPDATE
 //#define KALMAN_DECOUPLE_XY //decouple xy so filter doesn't explode
-
+#define KALMAN_ANCHOR_STATIONARY //decouples all states but x and y
 /**
  * Additionally, the filter supports the incorporation of additional sensors into the state estimate
  *
@@ -324,8 +324,14 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     }
     quadIsFlying = (xTaskGetTickCount()-lastFlightCmd) < IN_FLIGHT_TIME_THRESHOLD;
 
+
+#ifdef KALMAN_ANCHOR_STATIONARY
+
+#else
     float dt = (float)(osTick-lastPrediction)/configTICK_RATE_HZ;
     kalmanCorePredict(&coreData, thrustAccumulator, &accAccumulator, &gyroAccumulator, dt, quadIsFlying);
+#endif
+
 
     lastPrediction = osTick;
 
@@ -337,7 +343,9 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     thrustAccumulatorCount = 0;
 
 
-
+	#ifdef KALMAN_ANCHOR_STATIONARY
+	  kalmanCoreDecoupleAnchor(&coreData);
+	#endif
     doneUpdate = true;
   }
 
@@ -345,7 +353,10 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
   /**
    * Add process noise every loop, rather than every prediction
    */
-  kalmanCoreAddProcessNoise(&coreData, (float)(osTick-lastPNUpdate)/configTICK_RATE_HZ);
+  #ifdef KALMAN_ANCHOR_STATIONARY
+  #else
+  	  kalmanCoreAddProcessNoise(&coreData, (float)(osTick-lastPNUpdate)/configTICK_RATE_HZ);
+  #endif
   lastPNUpdate = osTick;
 
   if (sensorsReadMag(&sensors->mag)){

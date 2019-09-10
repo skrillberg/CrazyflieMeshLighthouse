@@ -340,6 +340,7 @@ void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
     float tan_bot = cosf(angle)*cosf(phi_p) + sinf(angle)*sinf(phi_p);
     float wrap_error = atan2f(tan_top,tan_bot);
     DEBUG_PRINT("Raw Diff: %f, Wrapped Diff: %f \n",(double)(angle - phi_p), (double)wrap_error);
+    DEBUG_PRINT("Pred X: %f, Pred Y: %f, Pred R: %f, Pred Phi: %f\n",(double)this->S[KC_STATE_X],(double)this->S[KC_STATE_Y], (double) r, (double) phi_p );
     scalarUpdate(this, &H,wrap_error, 0.05f);
     //if(angle - phi_p < 3.14159f){
     //	scalarUpdate(this, &H,angle - phi_p, 0.05f);
@@ -1452,7 +1453,19 @@ static void decoupleState(kalmanCoreData_t* this, kalmanCoreStateIdx_t state)
   // set state to zero
   this->S[state] = 0;
 }
+void kalmanCoreDecoupleAnchor(kalmanCoreData_t* this){
+	//decouple all states because we only care about x and y estimates from measurements
+	//We know that the anchor robot isn't moving.
+  decoupleState(this, KC_STATE_PX);
+  decoupleState(this, KC_STATE_PY);
+  decoupleState(this, KC_STATE_PZ);
+  decoupleState(this, KC_STATE_Z);
+  decoupleState(this, KC_STATE_D0);
+  decoupleState(this, KC_STATE_D1);
+  decoupleState(this, KC_STATE_D2);
 
+
+}
 void kalmanCoreDecoupleXY(kalmanCoreData_t* this)
 {
   decoupleState(this, KC_STATE_X);

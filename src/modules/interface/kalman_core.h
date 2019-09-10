@@ -148,5 +148,6 @@ void kalmanCoreFinalize(kalmanCoreData_t* this, sensorData_t *sensors, uint32_t 
 void kalmanCoreExternalizeState(kalmanCoreData_t* this, state_t *state, sensorData_t *sensors, uint32_t tick);
 
 void kalmanCoreDecoupleXY(kalmanCoreData_t* this);
+void kalmanCoreDecoupleAnchor(kalmanCoreData_t* this);
 
 #endif // __KALMAN_CORE_H__

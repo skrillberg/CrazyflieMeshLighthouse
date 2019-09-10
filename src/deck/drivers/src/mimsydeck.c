@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include "task.h"
 #include <stdbool.h>
+#include <math.h>
 //#include <stdint.h>
 #include "system.h"
 #include "config.h"
@@ -306,9 +307,11 @@ static void handleLighthousePacket(uint8_t * packet){
 
 
 	//TODO: need x and y scale in packet as well to avoid errors and hardcoding
+	float wrap = fmodf((float) (phi_int.val) * 0.001f +3.14159f,6.2818f) - 3.14159f;
+	DEBUG_PRINT("from mimsy: %f, before mod : %f, after mod: %f, mapped to -pi pi: %f\n",(double) ((float)(phi_int.val) * 0.001f),(double)((float) (phi_int.val) * 0.001f +3.14159f),(double)fmodf((float) (phi_int.val) * 0.001f +3.14159f,6.2818f),(double)wrap);
 	mlh.x = (float) (x.val * pos_scale);
 	mlh.y = (float) (y.val * pos_scale) ;
-	mlh.heading = (float) (phi_int.val) * 0.001f;
+	mlh.heading = wrap;
 	mlh.measTime = (float) t;
 
 
