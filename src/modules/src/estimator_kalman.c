@@ -355,7 +355,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  magAccumulatorCount++;
   }
 
-  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/2// update at
+  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/15// update at
         && magAccumulatorCount > 0){
 	  //mag accumulator update
 	  magAccumulator.x /= magAccumulatorCount;

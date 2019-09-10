@@ -286,6 +286,10 @@ static void scalarUpdate(kalmanCoreData_t* this, arm_matrix_instance_f32 *Hm, fl
   assertStateNotNaN(this);
 
 }
+static float mlh_x;
+static float mlh_y;
+static float mlh_phi;
+static float mlh_t;
 
 void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
 	  // a direct measurement of states x, y, and z
@@ -303,6 +307,11 @@ void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
 
 	   // DEBUG_PRINT("after scalar update %f \n");
 	  }*/
+	//log measurement
+	mlh_phi = mlh->heading;
+	mlh_t = mlh->measTime;
+	mlh_x = mlh->x;
+	mlh_y = mlh->y;
 	//angle of measurement
 	float angle = mlh->heading;
 	//distance between robot and anchor/lighhtouse
@@ -1459,6 +1468,14 @@ LOG_GROUP_START(kalman_pred)
   LOG_ADD(LOG_FLOAT, measNX, &measuredNX)
   LOG_ADD(LOG_FLOAT, measNY, &measuredNY)
 LOG_GROUP_STOP(kalman_pred)
+
+// log group mlh
+LOG_GROUP_START(kalman_mlh)
+  LOG_ADD(LOG_FLOAT, mlhX, &mlh_x)
+  LOG_ADD(LOG_FLOAT, mlhY, &mlh_y)
+  LOG_ADD(LOG_FLOAT, mlhPhi, &mlh_phi)
+  LOG_ADD(LOG_FLOAT, mlhT, &mlh_t)
+LOG_GROUP_STOP(kalman_mlh)
 
 PARAM_GROUP_START(kalman)
   PARAM_ADD(PARAM_FLOAT, pNAcc_xy, &procNoiseAcc_xy)

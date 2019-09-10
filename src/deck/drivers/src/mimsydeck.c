@@ -118,7 +118,7 @@ void updateMimsy(void){
 		x.val = (int16_t) (pos.x * 100); //x in centimeters now
 		y.val = (int16_t) (pos.y * 100); // y converted to cm
 		phi.val = (int32_t) (yaw *3.14159f/180.0f * 1000.0f); //phi converted to milliradians
-		DEBUG_PRINT("yaw: %ld, x: %d, y: %d \n", phi.val, x.val, y.val);
+		//DEBUG_PRINT("yaw: %ld, x: %d, y: %d \n", phi.val, x.val, y.val);
 
 		//construct uart packet
 		state_packet[0] = 's';
