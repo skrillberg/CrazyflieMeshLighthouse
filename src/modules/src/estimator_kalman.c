@@ -76,7 +76,7 @@
 #include "mimsydeck.h"
 // #define KALMAN_USE_BARO_UPDATE
 //#define KALMAN_DECOUPLE_XY //decouple xy so filter doesn't explode
-#define KALMAN_ANCHOR_STATIONARY //decouples all states but x and y
+//#define KALMAN_ANCHOR_STATIONARY //decouples all states but x and y
 /**
  * Additionally, the filter supports the incorporation of additional sensors into the state estimate
  *
@@ -366,7 +366,7 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  magAccumulatorCount++;
   }
 
-  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/15// update at
+  if ((osTick-lastMagUpdate) >= configTICK_RATE_HZ/40// update at
         && magAccumulatorCount > 0){
 	  //mag accumulator update
 	  magAccumulator.x /= magAccumulatorCount;
@@ -383,7 +383,12 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
 	  current_mag.y = mag.y;
 	  current_mag.z = mag.z;
 	  //kalmanCoreUpdateWithMag(&coreData, &mag);
-	   updateMimsy();
+		#ifdef KALMAN_ANCHOR_STATIONARY
+	  	  DEBUG_PRINT("X: %f, Y: %f,  Var X: %f, Var Y: %f \n",(double)coreData.S[KC_STATE_X],(double)coreData.S[KC_STATE_Y],(double) coreData.P[KC_STATE_X][KC_STATE_X],(double) coreData.P[KC_STATE_Y][KC_STATE_Y]);
+		#else
+	  	  updateMimsy();
+		#endif
+
 		//added by kilberg
 	  magAccumulator = (Axis3f){.axis={0}};
 	  magAccumulatorCount = 0;

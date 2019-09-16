@@ -159,7 +159,7 @@ static float initialZ = 0.0;
 static uint32_t tdoaCount;
 
 static bool heading_updated;
-
+static float heading_log;
 void kalmanCoreInit(kalmanCoreData_t* this) {
   tdoaCount = 0;
   heading_updated = false;
@@ -325,9 +325,12 @@ void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
     float h[KC_STATE_DIM] = {0};
     //h[KC_STATE_X] = -sin(angle)/r; //dh/dx
    // h[KC_STATE_Y] = cos(angle)/r; //dh/dy
+
+    float phi_p = atan2f(mlh->y - this->S[KC_STATE_Y],mlh->x - this->S[KC_STATE_X]);
+    //this might be a typo
     h[KC_STATE_X] = sinf(angle)/r; //dh/dx
     h[KC_STATE_Y] = -cosf(angle)/r; //dh/dy
-    float phi_p = atan2f(mlh->y - this->S[KC_STATE_Y],mlh->x - this->S[KC_STATE_X]);
+
     /*
     DEBUG_PRINT("z: %f, zp: %f, r: %f, Hx: %f, Hy: %f\n",angle,phi_p, r, h[KC_STATE_X], h[KC_STATE_Y]);
     DEBUG_PRINT("xp: %f, yp: %f\n",this->S[KC_STATE_X], this->S[KC_STATE_Y]);
@@ -341,7 +344,7 @@ void kalmanCoreUpdateWithMlh(kalmanCoreData_t * this, mlhMeasurement_t *mlh){
     float wrap_error = atan2f(tan_top,tan_bot);
     DEBUG_PRINT("Raw Diff: %f, Wrapped Diff: %f \n",(double)(angle - phi_p), (double)wrap_error);
     DEBUG_PRINT("Pred X: %f, Pred Y: %f, Pred R: %f, Pred Phi: %f\n",(double)this->S[KC_STATE_X],(double)this->S[KC_STATE_Y], (double) r, (double) phi_p );
-    scalarUpdate(this, &H,wrap_error, 0.05f);
+    scalarUpdate(this, &H,wrap_error, 0.1f);
     //if(angle - phi_p < 3.14159f){
     //	scalarUpdate(this, &H,angle - phi_p, 0.05f);
     //}
@@ -479,18 +482,28 @@ void getHeading(magMeasurement_t* mag,float * heading){
 	  //DEBUG_PRINT("Corrected: X: %f, Y: %f, Z: %f \n",(double)corrected_mag[0],(double)corrected_mag[1],(double)corrected_mag[2]);
 	  //DEBUG_PRINT("Raw: X: %f, Y: %f, Z: %f \n",(double)mag->x,(double)mag->y,(double)mag->z);
 	  //DEBUG_PRINT("\n");
+	  //for first crazyflie
+	  xbias = 0.1386f;
+	  ybias = 0.0662f;
+	  zbias = -0.0576f;
+	  xscale = 0.9940f;
+	  yscale = 1.0497f;
+	  zscale = 0.9603f;
 	  //for second crazyflie
+	  /*
 	  xbias = 0.42;
 	  ybias = -1.7789;
 	  zbias = -3.8691;
 	  xscale = 0.9764;
 	  yscale = 1.0719;
-	  zscale = 0.9589;
+	  zscale = 0.9589;*/
+
 	  mag ->x = xscale * (mag->x - xbias - y[0]);
 	  mag -> y = -yscale * (mag->y - ybias -y[1]);
 	  mag -> z = -zscale * (mag->z - zbias -y[2]);
 
 	  *heading = atan2f(mag->y,mag->x);
+	  heading_log = atan2f(mag->y,mag->x);
 }
 
 /*this update will derotate the magnetometer vector using pitch and roll
@@ -1489,6 +1502,10 @@ LOG_GROUP_START(kalman_mlh)
   LOG_ADD(LOG_FLOAT, mlhPhi, &mlh_phi)
   LOG_ADD(LOG_FLOAT, mlhT, &mlh_t)
 LOG_GROUP_STOP(kalman_mlh)
+
+LOG_GROUP_START(compass_heading)
+  LOG_ADD(LOG_FLOAT, heading, &heading_log)
+LOG_GROUP_STOP(compass_heading)
 
 PARAM_GROUP_START(kalman)
   PARAM_ADD(PARAM_FLOAT, pNAcc_xy, &procNoiseAcc_xy)

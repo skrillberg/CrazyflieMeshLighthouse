@@ -1,4 +1,5 @@
 #define DEBUG_MODULE "MimsyDeck"
+
 //include "mimsydeck.h"
 #include "debug.h"
 #include "deck.h"
@@ -20,9 +21,11 @@
 #include "estimator_kalman.h"
 #include "estimator.h"
 
+static float last_meas_time;
 static void handleLighthousePacket(uint8_t * packet);
 
 //function that periodically runs and transmits current state info to mimsy
+/*
 static void mimsyStateTask(void *param){
 	//register current wake time for task
 	TickType_t xLastWakeTime;
@@ -88,7 +91,7 @@ static void mimsyStateTask(void *param){
 		}
 	}
 }
-
+*/
 void updateMimsy(void){
 
 
@@ -313,11 +316,16 @@ static void handleLighthousePacket(uint8_t * packet){
 	mlh.y = (float) (y.val * pos_scale) ;
 	mlh.heading = wrap;
 	mlh.measTime = (float) t;
+	DEBUG_PRINT("mimsy time asn offset for current time in 10ms ticks %d\n",packet[0]);
 
+	if(t!=last_meas_time){
+		//send lighthouse measurement to estimator
+		estimatorEnqueueMimsyLighthouse(&mlh);
+	}else{
+		DEBUG_PRINT("Duplicate Measurement");
+	}
 
-	//send lighthouse measurement to estimator
-	estimatorEnqueueMimsyLighthouse(&mlh);
-
+	last_meas_time = (float) t;
 	//debug statements
 	/*
 	DEBUG_PRINT("x packet: %d, %d\n",packet[1], packet[2] );
@@ -430,7 +438,7 @@ static void mimsydeckInit()
 
 	//commanderInit();
     xTaskCreate(mimsydeckTask, "mimsy", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-    xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+    //xTaskCreate(mimsyStateTask, "mimsy state", 2*configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     isInit = true;
 }
 

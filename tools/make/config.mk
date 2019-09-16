@@ -10,7 +10,7 @@
 # CFLAGS += -DUSE_ESKYLINK
 
 ## Redirect the console output to the UART
-# CFLAGS += -DDEBUG_PRINT_ON_UART
+#CFLAGS += -DDEBUG_PRINT_ON_UART
 
 ## Redirect the console output to JLINK (using SEGGER RTT)
 # DEBUG_PRINT_ON_SEGGER_RTT = 1
